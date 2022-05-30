@@ -11,7 +11,7 @@ through the method of your choice.
 Install in your cluster using the static manifests:
 
 ```shell
-oc apply -f https://github.com/cert-manager/cert-manager-openshift-routes/releases/latest/cert-manager-openshift-routes.yaml
+oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml
 ```
 
 Annotate your routes:
