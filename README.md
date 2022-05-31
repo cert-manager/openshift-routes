@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cert-manager/cert-manager/d53c0b9270f8cd90d908460d69502694e1838f5f/logo/logo-small.png" height="256" width="256" alt="cert-manager project logo" />
+</p>
+
 # OpenShift Route Support for cert-manager
 
 This project supports automatically getting a certificate for
@@ -42,7 +46,7 @@ spec:
 
 Observe the `route.Spec.TLS` section of your route being populated automatically by cert-manager.
 
-The route's TLS certificate will be rotated 2/3 of the way through the certificate's lifetime, or 
+The route's TLS certificate will be rotated 2/3 of the way through the certificate's lifetime, or
 `cert-manager.io/renew-before` time before it expires.
 
 # Why is This a Separate Project?
