@@ -15,6 +15,19 @@ rules:
   - patch
   - update
 - apiGroups:
+  - route.openshift.io
+  resources:
+  - routes/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - route.openshift.io
+  resources:
+  - routes/custom-host
+  verbs:
+  - create
+  - update
+- apiGroups:
   - cert-manager.io
   resources:
   - certificaterequests
@@ -114,7 +127,3 @@ spec:
             initialDelaySeconds: 3
             periodSeconds: 5
             timeoutSeconds: 3
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsUser: 65534
-            runAsGroup: 65534
