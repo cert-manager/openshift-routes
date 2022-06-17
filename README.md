@@ -7,16 +7,71 @@
 This project supports automatically getting a certificate for
 OpenShift routes from any cert-manager Issuer.
 
-## Usage
+## Prerequisites:
 
-Ensure you have [cert-manager](https://github.com/cert-manager/cert-manager) installed
-through the method of your choice.
+1) Ensure you have [cert-manager](https://github.com/cert-manager/cert-manager) installed
+through the method of your choice. But make sure you install cert-manager and openshift-routes-deployment in the same namespace. By default this is in the namespace **cert-manager**.
+For example, with the regular manifest:
+```sh
+oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.0/cert-manager.yaml
+```
+Both **ClusterIssuer** and namespace based **Issuer** are possible. Here a **ClusterIssuer** is used:
+
+2) For example, create the ClusterIssuer (no additional ingress class is needed for the openshift-ingress router. The example.com email must be replaced by another one):
+
+```yaml
+apiVersion: v1
+items:
+- apiVersion: cert-manager.io/v1
+  kind: ClusterIssuer
+  metadata:
+    annotations:
+    name: letsencrypt-prod
+  spec:
+    acme:
+      email: mymail@example.com
+      preferredChain: ""
+      privateKeySecretRef:
+        name: letsencrypt-prod
+      server: https://acme-v02.api.letsencrypt.org/directory
+      solvers:
+      - http01:
+          ingress: {}
+```
+
+```sh
+oc apply -f clusterissuer.yaml
+```
+
+3) Make sure that there is an A record on the load balancer IP or a CNAME record on the load balancer hostname in your DNS system for the HTTP-01 subdomain.
+
+```
+CNAME:
+  Name: *.service.clustername.domain.com
+  Alias: your-lb-domain.cloud
+```
+
+## Usage
 
 Install in your cluster using the static manifests:
 
 ```shell
 oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml
 ```
+
+If you follow the above prerequisites, use this annotations below
+```yaml
+...
+metadata:
+  annotations:
+    cert-manager.io/issuer-kind: ClusterIssuer
+    cert-manager.io/issuer-name: letsencrypt-prod
+...
+spec:
+  host: app.service.clustername.domain.com
+...
+```
+
 
 Annotate your routes:
 
@@ -36,7 +91,7 @@ metadata:
     cert-manager.io/ip-sans: "10.20.30.40,192.168.192.168" # Optional, no default
     cert-manager.io/uri-sans: "spiffe://trustdomain/workload" # Optional, no default
 spec:
-  host: my-internal-service-host.my-domain # will be added to the Subject Alternative Names of the CertificateRequest
+  host: app.service.clustername.domain.com # will be added to the Subject Alternative Names of the CertificateRequest
   port:
     targetPort: 8080
   to:
@@ -48,6 +103,8 @@ Observe the `route.Spec.TLS` section of your route being populated automatically
 
 The route's TLS certificate will be rotated 2/3 of the way through the certificate's lifetime, or
 `cert-manager.io/renew-before` time before it expires.
+
+Now the website can be called: https://app.service.clustername.domain.com
 
 # Why is This a Separate Project?
 
