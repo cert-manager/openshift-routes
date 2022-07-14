@@ -437,7 +437,6 @@ func (r *Route) populateRoute(ctx context.Context, route *routev1.Route, cr *cma
 	route.Spec.TLS.Key = string(encodedKey)
 	delete(route.Annotations, cmapi.IsNextPrivateKeySecretLabelKey)
 	route.Spec.TLS.Certificate = string(cr.Status.Certificate)
-	route.Spec.TLS.CACertificate = string(cr.Status.CA)
 
 	_, err = r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
 	return err
