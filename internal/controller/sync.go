@@ -144,6 +144,11 @@ func (r *Route) hasValidCertificate(route *routev1.Route) bool {
 		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Issuing cert as the public key does not match the certificate")
 		return false
 	}
+	// Cert matches Route hostname?
+	if err := cert.VerifyHostname(route.Spec.Host); err != nil {
+		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Issuing cert as the hostname does not match the certificate")
+		return false
+	}
 	// Still not after the renew-before window?
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RenewBeforeAnnotationKey) {
 		renewBeforeDuration, err := time.ParseDuration(route.Annotations[cmapi.RenewBeforeAnnotationKey])
