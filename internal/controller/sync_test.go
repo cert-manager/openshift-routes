@@ -284,6 +284,29 @@ SOME GARBAGE
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as no TLS is configured"},
 		},
+		{
+			name: "changed route hostname triggers new certificate",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations:       map[string]string{cmapi.IssuerNameAnnotationKey: "some-issuer"},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-other-host.some-domain.tld",
+					TLS: &routev1.TLSConfig{
+						Termination:                   routev1.TLSTerminationEdge,
+						Certificate:                   string(validEcdsaCertPEM),
+						Key:                           string(ecdsaKeyPEM),
+						CACertificate:                 string(validEcdsaCertPEM),
+						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+					},
+				},
+			},
+			want:         false,
+			wantedEvents: []string{"Normal Issuing Issuing cert as the hostname does not match the certificate"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
