@@ -106,6 +106,15 @@ The route's TLS certificate will be rotated 2/3 of the way through the certifica
 
 Now the website can be called: https://app.service.clustername.domain.com
 
+## Development
+
+The source code for the controller can be found in the `./internal/` folder.
+After modifying the source code, you can execute the tests with:
+
+```sh
+go test ./...
+```
+
 # Why is This a Separate Project?
 
 We do not wish to support non Kubernetes (or kubernetes-sigs) APIs in cert-manager core. This adds
