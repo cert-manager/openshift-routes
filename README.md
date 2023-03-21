@@ -9,41 +9,43 @@ OpenShift routes from any cert-manager Issuer.
 
 ## Prerequisites:
 
-1) Ensure you have [cert-manager](https://github.com/cert-manager/cert-manager) installed
-through the method of your choice. But make sure you install cert-manager and openshift-routes-deployment in the same namespace. By default this is in the namespace **cert-manager**.
-For example, with the regular manifest:
+1. Ensure you have [cert-manager](https://github.com/cert-manager/cert-manager) installed
+   through the method of your choice. But make sure you install cert-manager and openshift-routes-deployment in the same namespace. By default this is in the namespace **cert-manager**.
+   For example, with the regular manifest:
+
 ```sh
 oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.0/cert-manager.yaml
 ```
+
 Both **ClusterIssuer** and namespace based **Issuer** are possible. Here a **ClusterIssuer** is used:
 
-2) For example, create the ClusterIssuer (no additional ingress class is needed for the openshift-ingress router. The example.com email must be replaced by another one):
+2. For example, create the ClusterIssuer (no additional ingress class is needed for the openshift-ingress router. The example.com email must be replaced by another one):
 
 ```yaml
 apiVersion: v1
 items:
-- apiVersion: cert-manager.io/v1
-  kind: ClusterIssuer
-  metadata:
-    annotations:
-    name: letsencrypt-prod
-  spec:
-    acme:
-      email: mymail@example.com
-      preferredChain: ""
-      privateKeySecretRef:
-        name: letsencrypt-prod
-      server: https://acme-v02.api.letsencrypt.org/directory
-      solvers:
-      - http01:
-          ingress: {}
+  - apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      annotations:
+      name: letsencrypt-prod
+    spec:
+      acme:
+        email: mymail@example.com
+        preferredChain: ""
+        privateKeySecretRef:
+          name: letsencrypt-prod
+        server: https://acme-v02.api.letsencrypt.org/directory
+        solvers:
+          - http01:
+              ingress: {}
 ```
 
 ```sh
 oc apply -f clusterissuer.yaml
 ```
 
-3) Make sure that there is an A record on the load balancer IP or a CNAME record on the load balancer hostname in your DNS system for the HTTP-01 subdomain.
+3. Make sure that there is an A record on the load balancer IP or a CNAME record on the load balancer hostname in your DNS system for the HTTP-01 subdomain.
 
 ```
 CNAME:
@@ -60,18 +62,17 @@ oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/dow
 ```
 
 If you follow the above prerequisites, use this annotations below
+
 ```yaml
-...
+---
 metadata:
   annotations:
     cert-manager.io/issuer-kind: ClusterIssuer
     cert-manager.io/issuer-name: letsencrypt-prod
-...
+---
 spec:
   host: app.service.clustername.domain.com
-...
 ```
-
 
 Annotate your routes:
 
@@ -127,3 +128,22 @@ to be imported as a module. It has a large number of transitive dependencies tha
 amount of maintenance to whichever project we submitted it to. In the future, we would like to split
 the cert-manager APIs and typed clients out of the main cert-manager repo, at which point it would be
 easier for other people to consume in their projects.
+
+# Release Process
+
+You must have write access to this repository to perform a release.
+
+1. ```bash
+   git checkout main
+   git pull origin main
+   ```
+
+2. Create a tag and push it:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+3. Once the GitHub Action has completed, you will see a new GitHub Release for
+   that version. Edit the release description if needed.
