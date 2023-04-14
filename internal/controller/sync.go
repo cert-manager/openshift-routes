@@ -214,15 +214,29 @@ func (r *Route) hasNextPrivateKey(route *routev1.Route) bool {
 }
 
 func (r *Route) generateNextPrivateKey(ctx context.Context, route *routev1.Route) error {
-	// TODO: different kinds of key
-	key, err := utilpki.GenerateRSAPrivateKey(utilpki.MinRSAKeySize)
-	if err != nil {
-		return fmt.Errorf("could not generate RSA Key: %w", err)
+	privateKeyAlgorithm, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
+	if !found {
+		privateKeyAlgorithm = string(cmapi.RSAKeyAlgorithm)
 	}
-
-	encodedKey, err := utilpki.EncodePrivateKey(key, cmapi.PKCS1)
+	var privateKey crypto.PrivateKey
+	var err error
+	switch privateKeyAlgorithm {
+	case string(cmapi.ECDSAKeyAlgorithm):
+		privateKey, err = utilpki.GenerateECPrivateKey(utilpki.ECCurve256)
+		if err != nil {
+			return fmt.Errorf("could not generate ECDSA key: %w", err)
+		}
+	case string(cmapi.RSAKeyAlgorithm):
+		privateKey, err = utilpki.GenerateRSAPrivateKey(utilpki.MinRSAKeySize)
+		if err != nil {
+			return fmt.Errorf("could not generate RSA Key: %w", err)
+		}
+	default:
+		return fmt.Errorf("invalid private key algorithm: %s", privateKeyAlgorithm)
+	}
+	encodedKey, err := utilpki.EncodePrivateKey(privateKey, cmapi.PrivateKeyEncoding(cmapi.PKCS1))
 	if err != nil {
-		return fmt.Errorf("could not encode RSA Key: %w", err)
+		return fmt.Errorf("could not encode %s key: %w", privateKeyAlgorithm, err)
 	}
 	route.Annotations[cmapi.IsNextPrivateKeySecretLabelKey] = string(encodedKey)
 	_, err = r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
@@ -353,12 +367,32 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		}
 	}
 
+	privateKeyAlgorithm, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
+	if !found {
+		privateKeyAlgorithm = string(cmapi.RSAKeyAlgorithm)
+	}
+
+	var signatureAlgorithm x509.SignatureAlgorithm
+	var publicKeyAlgorithm x509.PublicKeyAlgorithm
+	switch privateKeyAlgorithm {
+	case string(cmapi.ECDSAKeyAlgorithm):
+		signatureAlgorithm = x509.ECDSAWithSHA256
+		publicKeyAlgorithm = x509.ECDSA
+
+	case string(cmapi.RSAKeyAlgorithm):
+		signatureAlgorithm = x509.SHA256WithRSA
+		publicKeyAlgorithm = x509.RSA
+
+	default:
+		return fmt.Errorf("invalid private key algorithm, %s", privateKeyAlgorithm)
+	}
+
 	csr, err := x509.CreateCertificateRequest(
 		rand.Reader,
 		&x509.CertificateRequest{
 			Version:            0,
-			SignatureAlgorithm: x509.SHA256WithRSA,
-			PublicKeyAlgorithm: x509.RSA,
+			SignatureAlgorithm: signatureAlgorithm,
+			PublicKeyAlgorithm: publicKeyAlgorithm,
 			Subject: pkix.Name{
 				CommonName: route.Annotations[cmapi.CommonNameAnnotationKey],
 			},

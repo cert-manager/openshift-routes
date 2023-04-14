@@ -476,6 +476,44 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 			want:         nil,
 			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
 		},
+		{
+			name: "rsa annotated route has no private key",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:          "some-issuer",
+						cmapi.PrivateKeyAlgorithmAnnotationKey: "RSA",
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+			},
+			want:         nil,
+			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
+		},
+		{
+			name: "ecdsa annotated route has no private key",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:          "some-issuer",
+						cmapi.PrivateKeyAlgorithmAnnotationKey: "ECDSA",
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+			},
+			want:         nil,
+			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -501,6 +539,14 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 			assert.NoError(t, err)
 			_, err = utilpki.DecodePrivateKeyBytes([]byte(actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
 			assert.NoError(t, err)
+			switch tt.route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey] {
+			case string(cmapi.RSAKeyAlgorithm), "":
+				assert.Contains(t, actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey], "BEGIN RSA PRIVATE KEY")
+			case string(cmapi.ECDSAKeyAlgorithm):
+				assert.Contains(t, actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey], "BEGIN EC PRIVATE KEY")
+			default:
+				t.Errorf("Failing %v", tt.route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey])
+			}
 		})
 	}
 }
