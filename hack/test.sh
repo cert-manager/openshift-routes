@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.8.0/cert-manager.yaml
+kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.12.1/cert-manager.yaml
 cat <<EOF | kubectl apply -f -
 ---
 apiVersion: cert-manager.io/v1
