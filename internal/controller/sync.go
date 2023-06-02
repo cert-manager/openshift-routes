@@ -41,11 +41,12 @@ import (
 )
 
 const (
-	ReasonIssuing                = `Issuing`
-	ReasonInvalidKey             = `InvalidKey`
-	ReasonInvalidValue           = `InvalidValue`
-	ReasonInternalReconcileError = `InternalReconcileError`
-	ReasonMissingHostname        = `MissingHostname`
+	ReasonIssuing                    = `Issuing`
+	ReasonInvalidKey                 = `InvalidKey`
+	ReasonInvalidPrivateKeyAlgorithm = `InvalidPrivateKeyAlgorithm`
+	ReasonInvalidValue               = `InvalidValue`
+	ReasonInternalReconcileError     = `InternalReconcileError`
+	ReasonMissingHostname            = `MissingHostname`
 )
 
 const DefaultCertificateDuration = time.Hour * 24 * 90 // 90 days
@@ -232,6 +233,7 @@ func (r *Route) generateNextPrivateKey(ctx context.Context, route *routev1.Route
 			return fmt.Errorf("could not generate RSA Key: %w", err)
 		}
 	default:
+		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeyAlgorithm, "invalid private key algorithm: "+privateKeyAlgorithm)
 		return fmt.Errorf("invalid private key algorithm: %s", privateKeyAlgorithm)
 	}
 	encodedKey, err := utilpki.EncodePrivateKey(privateKey, cmapi.PrivateKeyEncoding(cmapi.PKCS1))
@@ -384,6 +386,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		publicKeyAlgorithm = x509.RSA
 
 	default:
+		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeyAlgorithm, "invalid private key algorithm: "+privateKeyAlgorithm)
 		return fmt.Errorf("invalid private key algorithm, %s", privateKeyAlgorithm)
 	}
 
