@@ -455,13 +455,14 @@ SOME GARBAGE
 
 func TestRoute_generateNextPrivateKey(t *testing.T) {
 	tests := []struct {
-		name         string
-		route        *routev1.Route
-		want         error
-		wantedEvents []string
+		name                   string
+		route                  *routev1.Route
+		want                   error
+		wantedEvents           []string
+		wantedPrivateKeyHeader string
 	}{
 		{
-			name: "route has no private key",
+			name: "route without algorithm annotation has no private key",
 			route: &routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
@@ -473,11 +474,12 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 				},
 				Spec: routev1.RouteSpec{},
 			},
-			want:         nil,
-			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
+			want:                   nil,
+			wantedEvents:           []string{"Normal Issuing Generated Private Key for route"},
+			wantedPrivateKeyHeader: "BEGIN RSA PRIVATE KEY",
 		},
 		{
-			name: "rsa annotated route has no private key",
+			name: "route with rsa algorithm annotation has no private key",
 			route: &routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
@@ -492,11 +494,12 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 					Host: "some-host.some-domain.tld",
 				},
 			},
-			want:         nil,
-			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
+			want:                   nil,
+			wantedEvents:           []string{"Normal Issuing Generated Private Key for route"},
+			wantedPrivateKeyHeader: "BEGIN RSA PRIVATE KEY",
 		},
 		{
-			name: "ecdsa annotated route has no private key",
+			name: "route with ecdsa algorithm annotation has no private key",
 			route: &routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
@@ -511,8 +514,29 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 					Host: "some-host.some-domain.tld",
 				},
 			},
-			want:         nil,
-			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
+			want:                   nil,
+			wantedEvents:           []string{"Normal Issuing Generated Private Key for route"},
+			wantedPrivateKeyHeader: "BEGIN EC PRIVATE KEY",
+		},
+		{
+			name: "route with invalid algorithm annotation has no private key",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:          "some-issuer",
+						cmapi.PrivateKeyAlgorithmAnnotationKey: "notreal",
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+			},
+			want:                   fmt.Errorf("invalid private key algorithm: notreal"),
+			wantedEvents:           []string{"Warning InvalidPrivateKeyAlgorithm invalid private key algorithm: notreal"},
+			wantedPrivateKeyHeader: "",
 		},
 	}
 	for _, tt := range tests {
@@ -535,17 +559,13 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 			sort.Strings(tt.wantedEvents)
 			sort.Strings(gotEvents)
 			assert.Equal(t, tt.wantedEvents, gotEvents, "hasNextPrivateKey() events")
-			actualRoute, err := fakeClient.RouteV1().Routes(tt.route.Namespace).Get(context.TODO(), tt.route.Name, metav1.GetOptions{})
-			assert.NoError(t, err)
-			_, err = utilpki.DecodePrivateKeyBytes([]byte(actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
-			assert.NoError(t, err)
-			switch tt.route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey] {
-			case string(cmapi.RSAKeyAlgorithm), "":
-				assert.Contains(t, actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey], "BEGIN RSA PRIVATE KEY")
-			case string(cmapi.ECDSAKeyAlgorithm):
-				assert.Contains(t, actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey], "BEGIN EC PRIVATE KEY")
-			default:
-				t.Errorf("Failing %v", tt.route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey])
+			// If generating the private key failed, there would not be a key to decode/validate
+			if tt.want == nil {
+				actualRoute, err := fakeClient.RouteV1().Routes(tt.route.Namespace).Get(context.TODO(), tt.route.Name, metav1.GetOptions{})
+				assert.NoError(t, err)
+				_, err = utilpki.DecodePrivateKeyBytes([]byte(actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
+				assert.NoError(t, err)
+				assert.Contains(t, actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey], tt.wantedPrivateKeyHeader)
 			}
 		})
 	}
