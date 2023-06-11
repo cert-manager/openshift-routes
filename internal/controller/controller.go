@@ -57,6 +57,9 @@ func (r *Route) Reconcile(ctx context.Context, req reconcile.Request) (reconcile
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IssuerNameAnnotationKey) {
 		log.V(5).Info("route has cert-manager annotation, reconciling", cmapi.IssuerNameAnnotationKey, route.Annotations[cmapi.IssuerNameAnnotationKey])
 		return r.sync(ctx, req, route.DeepCopy())
+	} else if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
+		log.V(5).Info("route has cert-manager annotation, reconciling", cmapi.IngressIssuerNameAnnotationKey, route.Annotations[cmapi.IngressIssuerNameAnnotationKey])
+		return r.sync(ctx, req, route.DeepCopy())
 	}
 	log.V(5).Info("ignoring route without cert-manager issuer name annotation")
 	return reconcile.Result{}, nil

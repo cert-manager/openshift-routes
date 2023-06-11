@@ -575,6 +575,12 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		Bytes: csr,
 	})
 
+	var issuerName string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
+		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
+	} else {
+		issuerName = route.Annotations[cmapi.IngressIssuerNameAnnotationKey]
+	}
 	cr := &cmapi.CertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: route.Name + "-",
@@ -590,7 +596,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		Spec: cmapi.CertificateRequestSpec{
 			Duration: &metav1.Duration{Duration: duration},
 			IssuerRef: cmmeta.ObjectReference{
-				Name:  route.Annotations[cmapi.IssuerNameAnnotationKey],
+				Name:  issuerName,
 				Kind:  route.Annotations[cmapi.IssuerKindAnnotationKey],
 				Group: route.Annotations[cmapi.IssuerGroupAnnotationKey],
 			},
