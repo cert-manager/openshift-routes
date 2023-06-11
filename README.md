@@ -105,6 +105,15 @@ metadata:
     cert-manager.io/uri-sans: "spiffe://trustdomain/workload" # Optional, no default
     cert-manager.io/private-key-algorithm: "ECDSA" # Optional, defaults to RSA
     cert-manager.io/private-key-size: "384" # Optional, defaults to 265 for ECDSA and 2048 for RSA
+    cert-manager.io/email-sans: "me@example.com,you@example.com" # Optional, no default
+    cert-manager.io/subject-organizations: "company" # Optional, no default
+    cert-manager.io/subject-organizationalunits: "company division" # Optional, no default
+    cert-manager.io/subject-countries: "My Country" # Optional, no default
+    cert-manager.io/subject-provinces: "My Province" # Optional, no default
+    cert-manager.io/subject-localities: "My City" # Optional, no default
+    cert-manager.io/subject-postalcodes: "123ABC" # Optional, no default
+    cert-manager.io/subject-streetaddresses: "1 Example St" # Optional, no default
+    cert-manager.io/subject-serialnumber: "123456" # Optional, no default
 spec:
   host: app.service.clustername.domain.com # will be added to the Subject Alternative Names of the CertificateRequest
   port:
