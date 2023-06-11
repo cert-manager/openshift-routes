@@ -53,6 +53,14 @@ func (r *Route) Reconcile(ctx context.Context, req reconcile.Request) (reconcile
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+	if len(route.ObjectMeta.OwnerReferences) > 0 {
+		for _, o := range route.ObjectMeta.OwnerReferences {
+			if o.Kind == "Ingress" {
+				log.V(5).Info("ignoring route owned by ingress", o.Name)
+				return reconcile.Result{}, nil
+			}
+		}
+	}
 	log.V(5).Info("retrieved route")
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IssuerNameAnnotationKey) {
 		log.V(5).Info("route has cert-manager annotation, reconciling", cmapi.IssuerNameAnnotationKey, route.Annotations[cmapi.IssuerNameAnnotationKey])
