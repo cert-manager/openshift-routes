@@ -100,6 +100,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 					},
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
 			want:         true,
 			wantedEvents: nil,
@@ -126,6 +133,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 					},
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the renew-before period has been reached"},
@@ -149,6 +163,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 					},
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the existing cert is more than 2/3 through its validity period"},
@@ -170,6 +191,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 						Key:                           string(anotherEcdsaKeyPEM),
 						CACertificate:                 string(validEcdsaCertPEM),
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+					},
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
 					},
 				},
 			},
@@ -197,6 +225,13 @@ SOME GARBAGE
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 					},
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the existing key is invalid: error decoding private key PEM block"},
@@ -217,6 +252,13 @@ SOME GARBAGE
 						Certificate:                   string(validEcdsaCertPEM),
 						CACertificate:                 string(validEcdsaCertPEM),
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+					},
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
 					},
 				},
 			},
@@ -243,6 +285,13 @@ SOME GARBAGE
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 					},
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the existing cert is invalid: error decoding certificate PEM block"},
@@ -264,6 +313,13 @@ SOME GARBAGE
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 					},
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as no certificate exists"},
@@ -280,32 +336,61 @@ SOME GARBAGE
 				Spec: routev1.RouteSpec{
 					Host: "some-host.some-domain.tld",
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as no TLS is configured"},
 		},
 		{
-			name: "changed route hostname triggers new certificate",
+			name: "uninitialized route",
 			route: &routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              "some-route",
+					Name:              "some-uninitialized-route",
 					Namespace:         "some-namespace",
 					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
 					Annotations:       map[string]string{cmapi.IssuerNameAnnotationKey: "some-issuer"},
 				},
 				Spec: routev1.RouteSpec{
-					Host: "some-other-host.some-domain.tld",
-					TLS: &routev1.TLSConfig{
-						Termination:                   routev1.TLSTerminationEdge,
-						Certificate:                   string(validEcdsaCertPEM),
-						Key:                           string(ecdsaKeyPEM),
-						CACertificate:                 string(validEcdsaCertPEM),
-						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{},
+				},
+			},
+			want: false,
+			wantedEvents: []string{
+				"Normal Issuing Issuing cert as no TLS is configured",
+				"Route has not been initialized with a Status",
+			},
+		},
+		{
+			name: "route with subdomain",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-uninitialized-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations:       map[string]string{cmapi.IssuerNameAnnotationKey: "some-issuer"},
+				},
+				Spec: routev1.RouteSpec{
+					Subdomain: "sub-domain",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "sub-domain.ingress.example.com",
+						},
 					},
 				},
 			},
-			want:         false,
-			wantedEvents: []string{"Normal Issuing Issuing cert as the hostname does not match the certificate"},
+			want:         true,
+			wantedEvents: nil,
 		},
 	}
 	for _, tt := range tests {

@@ -45,6 +45,7 @@ const (
 	ReasonInvalidKey             = `InvalidKey`
 	ReasonInvalidValue           = `InvalidValue`
 	ReasonInternalReconcileError = `InternalReconcileError`
+	ReasonMissingHostname        = `MissingHostname`
 )
 
 // sync reconciles an Openshift route.
@@ -145,9 +146,12 @@ func (r *Route) hasValidCertificate(route *routev1.Route) bool {
 		return false
 	}
 	// Cert matches Route hostname?
-	if err := cert.VerifyHostname(route.Spec.Host); err != nil {
-		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Issuing cert as the hostname does not match the certificate")
-		return false
+	hostnames := getRouteHostnames(route)
+	for _, host := range hostnames {
+		if err := cert.VerifyHostname(host); err != nil {
+			r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Issuing cert as the hostname does not match the certificate")
+			return false
+		}
 	}
 	// Still not after the renew-before window?
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RenewBeforeAnnotationKey) {
@@ -294,14 +298,21 @@ func (r *Route) createNextCR(ctx context.Context, route *routev1.Route, revision
 		return nil
 	}
 
-	// Parse out SANs
 	var dnsNames []string
+	// Get the canonical hostname(s) of the Route (from .spec.host or .spec.subdomain)
+	dnsNames = getRouteHostnames(route)
+	if len(dnsNames) == 0 {
+		r.log.V(1).Error(fmt.Errorf("Route is not yet initialized with a hostname"),
+			"object", route.Namespace+"/"+route.Name)
+		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonMissingHostname, "Route is not yet initialized with a hostname")
+		// Not a reconcile error, so stop. Will be re-tried when the route status changes.
+		return nil
+	}
+
+	// Parse out SANs
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.AltNamesAnnotationKey) {
 		altNames := strings.Split(route.Annotations[cmapi.AltNamesAnnotationKey], ",")
 		dnsNames = append(dnsNames, altNames...)
-	}
-	if len(route.Spec.Host) > 0 {
-		dnsNames = append(dnsNames, route.Spec.Host)
 	}
 	var ipSans []net.IP
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
@@ -486,4 +497,36 @@ func certDurationFromRoute(r *routev1.Route) (time.Duration, error) {
 		duration = durationOverride
 	}
 	return duration, nil
+}
+
+// This function returns the hostnames that have been admitted by an Ingress Controller.
+// Usually this is just `.spec.host`, but as of OpenShift 4.11 users may also specify `.spec.subdomain`,
+// in which case the fully qualified hostname is derived from the hostname of the Ingress Controller.
+// In both cases, the final hostname is reflected in `.status.ingress[].host`.
+// Note that a Route can be admitted by multiple ingress controllers, so it may have multiple hostnames.
+func getRouteHostnames(r *routev1.Route) []string {
+	hostnames := []string{}
+	for _, ing := range r.Status.Ingress {
+		// Iterate over all Ingress Controllers which have admitted the Route
+		for i := range ing.Conditions {
+			if ing.Conditions[i].Type == "Admitted" && ing.Conditions[i].Status == "True" {
+				// The same hostname can be exposed by multiple Ingress routers,
+				// but we only want a list of unique hostnames.
+				if !stringInSlice(hostnames, ing.Host) {
+					hostnames = append(hostnames, ing.Host)
+				}
+			}
+		}
+	}
+
+	return hostnames
+}
+
+func stringInSlice(slice []string, s string) bool {
+	for i := range slice {
+		if slice[i] == s {
+			return true
+		}
+	}
+	return false
 }
