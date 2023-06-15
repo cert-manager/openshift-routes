@@ -30,18 +30,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Run GoReleaser (PR)
-        uses: goreleaser/goreleaser-action@v2
-        if: "!startsWith(github.ref, 'refs/tags')" # runs on a PR
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --snapshot
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Run GoReleaser (Publish Release)
         uses: goreleaser/goreleaser-action@v2
-        if: "startsWith(github.ref, 'refs/tags')" # runs on a Tag being pushed
         with:
           distribution: goreleaser
           version: latest
