@@ -1,130 +1,145 @@
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+apiVersion: template.openshift.io/v1
+kind: Template
 metadata:
-  name: cert-manager-openshift-routes
-rules:
-- apiGroups:
-  - route.openshift.io
-  resources:
-  - routes
-  verbs:
-  - get
-  - list
-  - watch
-  - patch
-  - update
-- apiGroups:
-  - route.openshift.io
-  resources:
-  - routes/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - route.openshift.io
-  resources:
-  - routes/custom-host
-  verbs:
-  - create
-  - update
-- apiGroups:
-  - cert-manager.io
-  resources:
-  - certificaterequests
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-- apiGroups:
-    - cert-manager.io
-  resources:
-    - certificaterequests/status
-  verbs:
-    - get
-    - list
-    - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - create
-  - get
-  - list
-  - update
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cert-manager-openshift-routes
-  namespace: cert-manager
-automountServiceAccountToken: false
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: cert-manager-openshift-routes
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: cert-manager-openshift-routes
-subjects:
-- kind: ServiceAccount
-  name: cert-manager-openshift-routes
-  namespace: cert-manager
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: cert-manager-openshift-routes
-  namespace: cert-manager
-  labels:
-    app.kubernetes.io/name: cert-manager-openshift-routes
-    app.kubernetes.io/version: "$RELEASED_VERSION"
-    app.kubernetes.io/component: controller
-    app.kubernetes.io/part-of: cert-manager
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app.kubernetes.io/name: cert-manager-openshift-routes
-      app.kubernetes.io/version: "$RELEASED_VERSION"
-      app.kubernetes.io/component: controller
-      app.kubernetes.io/part-of: cert-manager
-  template:
+  name: cert-manager-openshift-routes-deploy
+objects:
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
     metadata:
+      name: cert-manager-openshift-routes
+    rules:
+    - apiGroups:
+      - route.openshift.io
+      resources:
+      - routes
+      verbs:
+      - get
+      - list
+      - watch
+      - patch
+      - update
+    - apiGroups:
+      - route.openshift.io
+      resources:
+      - routes/finalizers
+      verbs:
+      - update
+    - apiGroups:
+      - route.openshift.io
+      resources:
+      - routes/custom-host
+      verbs:
+      - create
+      - update
+    - apiGroups:
+      - cert-manager.io
+      resources:
+      - certificaterequests
+      verbs:
+      - create
+      - get
+      - list
+      - watch
+    - apiGroups:
+        - cert-manager.io
+      resources:
+        - certificaterequests/status
+      verbs:
+        - get
+        - list
+        - watch
+    - apiGroups:
+      - ""
+      resources:
+      - events
+      verbs:
+      - create
+      - patch
+    - apiGroups:
+      - coordination.k8s.io
+      resources:
+      - leases
+      verbs:
+      - create
+      - get
+      - list
+      - update
+
+  - apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: cert-manager-openshift-routes
+      namespace: ${CERT_MANAGER_NAMESPACE}
+    automountServiceAccountToken: false
+
+  - apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: cert-manager-openshift-routes
+    roleRef:
+      apiGroup: rbac.authorization.k8s.io
+      kind: ClusterRole
+      name: cert-manager-openshift-routes
+    subjects:
+    - kind: ServiceAccount
+      name: cert-manager-openshift-routes
+      namespace: ${CERT_MANAGER_NAMESPACE}
+
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: cert-manager-openshift-routes
+      namespace: ${CERT_MANAGER_NAMESPACE}
       labels:
         app.kubernetes.io/name: cert-manager-openshift-routes
         app.kubernetes.io/version: "$RELEASED_VERSION"
         app.kubernetes.io/component: controller
-        app.kubernetes.io/part-of: cert-manager
+        app.kubernetes.io/part-of: ${CERT_MANAGER_NAMESPACE}
     spec:
-      serviceAccountName: cert-manager-openshift-routes
-      automountServiceAccountToken: true
-      containers:
-        - name: cert-manager-openshift-routes
-          image: "ghcr.io/cert-manager/cert-manager-openshift-routes:$RELEASED_VERSION"
-          args:
-          - -v=5
-          ports:
-          - containerPort: 6060
-            name: readiness
-            protocol: TCP
-          - containerPort: 9042
-            name: metrics
-            protocol: TCP
-          readinessProbe:
-            httpGet:
-              port: readiness
-              path: "/readyz"
-            initialDelaySeconds: 3
-            periodSeconds: 5
-            timeoutSeconds: 3
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: cert-manager-openshift-routes
+          app.kubernetes.io/version: "$RELEASED_VERSION"
+          app.kubernetes.io/component: controller
+          app.kubernetes.io/part-of: ${CERT_MANAGER_NAMESPACE}
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: cert-manager-openshift-routes
+            app.kubernetes.io/version: "$RELEASED_VERSION"
+            app.kubernetes.io/component: controller
+            app.kubernetes.io/part-of: ${CERT_MANAGER_NAMESPACE}
+        spec:
+          serviceAccountName: cert-manager-openshift-routes
+          automountServiceAccountToken: true
+          containers:
+            - name: cert-manager-openshift-routes
+              image: "ghcr.io/cert-manager/cert-manager-openshift-routes:$RELEASED_VERSION"
+              args:
+              - -v=5
+              ports:
+              - containerPort: 6060
+                name: readiness
+                protocol: TCP
+              - containerPort: 9042
+                name: metrics
+                protocol: TCP
+              readinessProbe:
+                httpGet:
+                  port: readiness
+                  path: "/readyz"
+                initialDelaySeconds: 3
+                periodSeconds: 5
+                timeoutSeconds: 3
+            - env:
+              - name: CERT_MANAGER_NAMESPACE
+                value: ${CERT_MANAGER_NAMESPACE}
+
+
+parameters:
+  - name: CERT_MANAGER_NAMESPACE
+    description: Namespace where cert-manager is installed
+    value: cert-manager
+    required: true
