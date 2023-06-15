@@ -32,7 +32,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	get "github.com/poponealex/openshift-routes/internal/cmd/app/options"
+	"internal/cmd/app/options"
 )
 
 type Route struct {
