@@ -32,7 +32,7 @@ dockers:
   - id: cert-manager-openshift-routes-amd64
     goarch: amd64
     image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-amd64
+      - ghcr.io/poponealex/cert-manager-openshift-routes:{{ .Version }}-amd64
     use: buildx
     dockerfile: internal/cmd/Dockerfile
     build_flag_templates:
@@ -44,7 +44,7 @@ dockers:
   - id: cert-manager-openshift-routes-arm64
     goarch: arm64
     image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-arm64
+      - ghcr.io/poponealex/cert-manager-openshift-routes:{{ .Version }}-arm64
     use: buildx
     dockerfile: internal/cmd/Dockerfile
     build_flag_templates:
@@ -53,78 +53,11 @@ dockers:
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
-  - id: cert-manager-openshift-routes-armv6
-    goarch: arm
-    goarm: "6"
-    image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-armv6
-    use: buildx
-    dockerfile: internal/cmd/Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm/v6"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-  - id: cert-manager-openshift-routes-armv7
-    goarch: arm
-    goarm: "7"
-    image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-armv7
-    use: buildx
-    dockerfile: internal/cmd/Dockerfile
-    build_flag_templates:
-      - "--platform=linux/arm/v7"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-  - id: cert-manager-openshift-routes-s390x
-    goarch: s390x
-    image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-s390x
-    use: buildx
-    dockerfile: internal/cmd/Dockerfile
-    build_flag_templates:
-      - "--platform=linux/s390x"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-  - id: cert-manager-openshift-routes-riscv64
-    goarch: riscv64
-    image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-riscv64
-    use: buildx
-    dockerfile: internal/cmd/Dockerfile
-    build_flag_templates:
-      - "--platform=linux/riscv64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-  - id: cert-manager-openshift-routes-ppc64le
-    goarch: ppc64le
-    image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-ppc64le
-    use: buildx
-    dockerfile: internal/cmd/Dockerfile
-    build_flag_templates:
-      - "--platform=linux/ppc64le"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
 docker_manifests:
-  - name_template: ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}
+  - name_template: ghcr.io/poponealex/cert-manager-openshift-routes:{{ .Version }}
     image_templates:
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-amd64
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-arm64
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-armv6
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-armv7
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-s390x
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-riscv64
-      - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-ppc64le
+      - ghcr.io/poponealex/cert-manager-openshift-routes:{{ .Version }}-amd64
+      - ghcr.io/poponealex/cert-manager-openshift-routes:{{ .Version }}-arm64
 checksum:
   name_template: 'checksums.txt'
 release:
