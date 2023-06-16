@@ -1,4 +1,4 @@
-module github.com/poponealex/openshift-routes
+module github.com/cert-manager/openshift-routes
 
 go 1.18
 

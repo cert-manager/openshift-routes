@@ -116,7 +116,7 @@ objects:
           automountServiceAccountToken: true
           containers:
             - name: cert-manager-openshift-routes
-              image: "ghcr.io/poponealex/cert-manager-openshift-routes:$RELEASED_VERSION"
+              image: "ghcr.io/cert-manager/cert-manager-openshift-routes:$RELEASED_VERSION"
               args:
               - -v=5
               ports:
