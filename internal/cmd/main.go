@@ -19,7 +19,7 @@ package main
 import (
 	"os"
 
-	get "github.com/poponealex/openshift-routes/internal/cmd/app"
+	"github.com/poponealex/openshift-routes/internal/cmd/app"
 )
 
 func main() {
