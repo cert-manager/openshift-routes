@@ -32,8 +32,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/poponealex/openshift-routes/internal/cmd/app/options"
-	"github.com/poponealex/openshift-routes/internal/controller"
+	"github.com/cert-manager/openshift-routes/internal/cmd/app/options"
+	"github.com/cert-manager/openshift-routes/internal/controller"
 )
 
 func Command() *cobra.Command {

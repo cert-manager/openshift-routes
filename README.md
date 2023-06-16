@@ -57,12 +57,12 @@ Install in your cluster using the static manifests:
 
 To install in the default `cert-manager` namespace, run the following:
 ```shell
-oc process -f https://github.com/poponealex/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml | oc create -f -
+oc process -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml | oc create -f -
 ```
 
 To install in a custom namespace, replace <NAMESPACE_NAME> and run the following:
 ```shell
-oc process -f https://github.com/poponealex/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml -p CERT_MANAGER_NAMESPACE=<NAMESPACE_NAME> | oc create -f -
+oc process -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml -p CERT_MANAGER_NAMESPACE=<NAMESPACE_NAME> | oc create -f -
 ```
 
 If you follow the above prerequisites, use this annotations below
