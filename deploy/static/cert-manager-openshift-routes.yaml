@@ -116,7 +116,7 @@ objects:
           automountServiceAccountToken: true
           containers:
             - name: cert-manager-openshift-routes
-              image: "ghcr.io/cert-manager/cert-manager-openshift-routes:$RELEASED_VERSION"
+              image: "ghcr.io/poponealex/cert-manager-openshift-routes:$RELEASED_VERSION"
               args:
               - -v=5
               ports:
@@ -133,10 +133,9 @@ objects:
                 initialDelaySeconds: 3
                 periodSeconds: 5
                 timeoutSeconds: 3
-            - env:
-              - name: CERT_MANAGER_NAMESPACE
-                value: ${CERT_MANAGER_NAMESPACE}
-
+              env:
+                - name: CERT_MANAGER_NAMESPACE
+                  value: ${CERT_MANAGER_NAMESPACE}
 
 parameters:
   - name: CERT_MANAGER_NAMESPACE
