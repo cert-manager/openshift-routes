@@ -11,13 +11,9 @@ OpenShift routes from any cert-manager Issuer.
 
 1) Ensure you have [cert-manager](https://github.com/cert-manager/cert-manager) installed
 through the method of your choice. But make sure you install cert-manager and openshift-routes-deployment in the same namespace. By default this is in the namespace **cert-manager**. You may change the default namespace by setting the `CERT_MANAGER_NAMESPACE` when processing the the static manifest.
-For example, with the regular manifest leaving **cert-manager** as the default namespace:
+For example, with the regular manifest:
 ```sh
-oc process -f https://github.com/jetstack/cert-manager/releases/download/v1.8.0/cert-manager.yaml | oc create -f -
-```
-For example, with the regular manifest using a different namespace than **cert-manager**:
-```sh
-oc process -f https://github.com/jetstack/cert-manager/releases/download/v1.8.0/cert-manager.yaml -p CERT_MANAGER_NAMESPACE=openshift-cert-manager | oc create -f -
+oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.0/cert-manager.yaml
 ```
 Both **ClusterIssuer** and namespace based **Issuer** are possible. Here a **ClusterIssuer** is used:
 
