@@ -19,6 +19,7 @@ package options
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
@@ -132,6 +133,6 @@ func (o *Options) addAppFlags(fs *pflag.FlagSet) {
 		"Whether to enable leader election on the controller.")
 
 	fs.StringVar(&o.LeaderElectionNamespace,
-		"leader-election-namespace", "cert-manager",
+		"leader-election-namespace", os.Getenv("CERT_MANAGER_NAMESPACE"),
 		"Namespace to create leader election resources in.")
 }
