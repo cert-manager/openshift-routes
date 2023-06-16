@@ -5,5 +5,5 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 export RELEASED_VERSION="$1"
-envsubst < "./deploy/static/cert-manager-openshift-routes.yaml" > "cert-manager-openshift-routes-$RELEASED_VERSION.yaml"
+envsubst {CERT_MANAGER_NAMESPACE}='${{CERT_MANAGER_NAMESPACE}}' < "./deploy/static/cert-manager-openshift-routes.yaml" > "cert-manager-openshift-routes-$RELEASED_VERSION.yaml"
 exit 0
