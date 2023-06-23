@@ -118,7 +118,7 @@ spec:
           - containerPort: 6060
             name: readiness
             protocol: TCP
-          - containerPort: 9042
+          - containerPort: 9402
             name: metrics
             protocol: TCP
           readinessProbe:
