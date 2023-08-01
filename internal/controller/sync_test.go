@@ -21,11 +21,14 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
+	"net/url"
 	"sort"
 	"testing"
 	"time"
@@ -36,6 +39,7 @@ import (
 	fakeroutev1client "github.com/openshift/client-go/route/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 )
@@ -83,7 +87,7 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 	}{
 		{
 			name: "valid and up-to-date ecdsa cert is OK",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -101,12 +105,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 					},
 				},
 			},
+				true),
 			want:         true,
 			wantedEvents: nil,
 		},
 		{
 			name: "route with renew-before annotation overrides the default 2/3 lifetime behaviour",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -127,12 +132,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 					},
 				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the renew-before period has been reached"},
 		},
 		{
 			name: "expiring soon ecdsa cert triggers a renewal",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -150,12 +156,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 					},
 				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the existing cert is more than 2/3 through its validity period"},
 		},
 		{
 			name: "cert not matching key triggers a renewal",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -173,12 +180,13 @@ func TestRoute_hasValidCertificate(t *testing.T) {
 					},
 				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the public key does not match the certificate"},
 		},
 		{
 			name: "junk data in key triggers a renewal",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -198,12 +206,13 @@ SOME GARBAGE
 					},
 				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the existing key is invalid: error decoding private key PEM block"},
 		},
 		{
 			name: "missing private key triggers a renewal",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -220,12 +229,13 @@ SOME GARBAGE
 					},
 				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as no private key exists"},
 		},
 		{
 			name: "junk data in cert triggers a renewal",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -243,13 +253,21 @@ SOME GARBAGE
 						InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 					},
 				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+						},
+					},
+				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as the existing cert is invalid: error decoding certificate PEM block"},
 		},
 		{
 			name: "missing cert triggers a renewal",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -265,12 +283,13 @@ SOME GARBAGE
 					},
 				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as no certificate exists"},
 		},
 		{
 			name: "missing tls config triggers a renewal",
-			route: &routev1.Route{
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -281,12 +300,13 @@ SOME GARBAGE
 					Host: "some-host.some-domain.tld",
 				},
 			},
+				true),
 			want:         false,
 			wantedEvents: []string{"Normal Issuing Issuing cert as no TLS is configured"},
 		},
 		{
-			name: "changed route hostname triggers new certificate",
-			route: &routev1.Route{
+			name: "route with changed hostname",
+			route: generateRouteStatus(&routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
 					Namespace:         "some-namespace",
@@ -304,8 +324,30 @@ SOME GARBAGE
 					},
 				},
 			},
-			want:         false,
-			wantedEvents: []string{"Normal Issuing Issuing cert as the hostname does not match the certificate"},
+				true),
+			want: false,
+			wantedEvents: []string{
+				"Normal Issuing Issuing cert as the hostname does not match the certificate",
+			},
+		},
+		{
+			name: "route with subdomain",
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-uninitialized-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations:       map[string]string{cmapi.IssuerNameAnnotationKey: "some-issuer"},
+				},
+				Spec: routev1.RouteSpec{
+					Subdomain: "sub-domain",
+				},
+			},
+				true),
+			want: false,
+			wantedEvents: []string{
+				"Normal Issuing Issuing cert as no TLS is configured",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -351,9 +393,7 @@ func TestRoute_hasNextPrivateKey(t *testing.T) {
 						cmapi.IsNextPrivateKeySecretLabelKey: string(ecdsaKeyPEM),
 					},
 				},
-				Spec: routev1.RouteSpec{
-					Host: "some-host.some-domain.tld",
-				},
+				Spec: routev1.RouteSpec{},
 			},
 			want:         true,
 			wantedEvents: nil,
@@ -369,9 +409,7 @@ func TestRoute_hasNextPrivateKey(t *testing.T) {
 						cmapi.IssuerNameAnnotationKey: "some-issuer",
 					},
 				},
-				Spec: routev1.RouteSpec{
-					Host: "some-host.some-domain.tld",
-				},
+				Spec: routev1.RouteSpec{},
 			},
 			want:         false,
 			wantedEvents: nil,
@@ -390,9 +428,7 @@ SOME GARBAGE
 -----END PRIVATE KEY-----`,
 					},
 				},
-				Spec: routev1.RouteSpec{
-					Host: "some-host.some-domain.tld",
-				},
+				Spec: routev1.RouteSpec{},
 			},
 			want:         false,
 			wantedEvents: []string{"Warning InvalidKey Regenerating Next Private Key as the existing key is invalid: error decoding private key PEM block"},
@@ -435,9 +471,7 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 						cmapi.IssuerNameAnnotationKey: "some-issuer",
 					},
 				},
-				Spec: routev1.RouteSpec{
-					Host: "some-host.some-domain.tld",
-				},
+				Spec: routev1.RouteSpec{},
 			},
 			want:         nil,
 			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
@@ -490,9 +524,7 @@ func Test_getCurrentRevision(t *testing.T) {
 						cmapi.CertificateRequestRevisionAnnotationKey: "1337",
 					},
 				},
-				Spec: routev1.RouteSpec{
-					Host: "some-host.some-domain.tld",
-				},
+				Spec: routev1.RouteSpec{},
 			},
 			want:    1337,
 			wantErr: nil,
@@ -508,9 +540,7 @@ func Test_getCurrentRevision(t *testing.T) {
 						cmapi.IssuerNameAnnotationKey: "some-issuer",
 					},
 				},
-				Spec: routev1.RouteSpec{
-					Host: "some-host.some-domain.tld",
-				},
+				Spec: routev1.RouteSpec{},
 			},
 			want:    0,
 			wantErr: fmt.Errorf("no revision found"),
@@ -544,9 +574,7 @@ func TestRoute_setRevision(t *testing.T) {
 						cmapi.IssuerNameAnnotationKey: "some-issuer",
 					},
 				},
-				Spec: routev1.RouteSpec{
-					Host: "some-host.some-domain.tld",
-				},
+				Spec: routev1.RouteSpec{},
 			},
 			revision: 1337,
 			want:     "1337",
@@ -568,4 +596,217 @@ func TestRoute_setRevision(t *testing.T) {
 			assert.Equal(t, tt.want, actualRoute.Annotations[cmapi.CertificateRequestRevisionAnnotationKey], "setRevision()")
 		})
 	}
+}
+
+func TestRoute_buildNextCR(t *testing.T) {
+	// set up key for test cases
+	rsaKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	require.NoError(t, err)
+	rsaPEM, err := utilpki.EncodePKCS8PrivateKey(rsaKey)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name       string
+		route      *routev1.Route
+		revision   int
+		want       *cmapi.CertificateRequest
+		wantErr    error
+		wantCSR    *x509.CertificateRequest
+		wantEvents []string
+	}{
+		{
+			name:     "Basic test with duration and hostname",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.DurationAnnotationKey:          "42m",
+						cmapi.IsNextPrivateKeySecretLabelKey: string(rsaPEM),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Duration: &metav1.Duration{Duration: 42 * time.Minute},
+					IsCA:     false,
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "With subdomain and multiple ICs",
+			revision: 1337,
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route-with-subdomain",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey: string(rsaPEM),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Subdomain: "some-sub-domain",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-sub-domain.some-domain.tld", // suffix depends on IC config
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+						{
+							Host: "some-sub-domain.some-other-ic.example.com",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+						{
+							Host: "some-sub-domain.not-admitted.example.com",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "False",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-with-subdomain-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.SHA256WithRSA,
+				PublicKeyAlgorithm: x509.RSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-sub-domain.some-domain.tld", "some-sub-domain.some-other-ic.example.com"},
+				IPAddresses: []net.IP{},
+				URIs:        []*url.URL{},
+			},
+			wantErr: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := record.NewFakeRecorder(100)
+			r := &Route{
+				eventRecorder: recorder,
+			}
+			// test "buildNextCR" function
+			cr, err := r.buildNextCR(context.TODO(), tt.route, tt.revision)
+
+			// check that we got the expected error (including nil)
+			assert.Equal(t, tt.wantErr, err, "buildNextCR()")
+
+			// check that the returned object is as expected
+			assert.Equal(t, tt.want.ObjectMeta.GenerateName, cr.ObjectMeta.GenerateName)
+			assert.Equal(t, tt.want.ObjectMeta.Namespace, cr.ObjectMeta.Namespace)
+			assert.Equal(t, tt.want.ObjectMeta.Annotations, cr.ObjectMeta.Annotations)
+			assert.Equal(t, tt.want.ObjectMeta.Labels, cr.ObjectMeta.Labels)
+			assert.Equal(t, tt.want.Spec.Duration, cr.Spec.Duration)
+			assert.Equal(t, tt.want.Spec.IsCA, cr.Spec.IsCA)
+			assert.Equal(t, tt.want.Spec.Usages, cr.Spec.Usages)
+
+			// check the CSR
+			if tt.wantCSR != nil {
+				csr, err := x509.CreateCertificateRequest(rand.Reader, tt.wantCSR, rsaKey)
+				assert.NoError(t, err)
+				csrPEM := pem.EncodeToMemory(&pem.Block{
+					Type:  "CERTIFICATE REQUEST",
+					Bytes: csr,
+				})
+				assert.Equal(t, cr.Spec.Request, csrPEM)
+			}
+
+			// check the events that were generated
+			close(recorder.Events)
+			if len(tt.wantEvents) > 0 {
+				var gotEvents []string
+				for e := range recorder.Events {
+					gotEvents = append(gotEvents, e)
+				}
+				sort.Strings(tt.wantEvents)
+				sort.Strings(gotEvents)
+				assert.Equal(t, tt.wantEvents, gotEvents, "createNextCR() events")
+			}
+
+		})
+	}
+}
+
+// trivial logic that re-implements OpenShift's IngressController behavior
+func generateRouteStatus(route *routev1.Route, admitted bool) *routev1.Route {
+	var host string
+	if route.Spec.Host != "" {
+		host = route.Spec.Host
+	}
+	if route.Spec.Subdomain != "" {
+		host = route.Spec.Subdomain + ".cert-manager.io" // suffix depends on IC config
+	}
+
+	var admittedStatus = corev1.ConditionTrue
+	if admitted == false {
+		admittedStatus = corev1.ConditionFalse
+	}
+
+	route.Status = routev1.RouteStatus{
+		Ingress: []routev1.RouteIngress{
+			{
+				Host: host,
+				Conditions: []routev1.RouteIngressCondition{
+					{
+						Type:   "Admitted",
+						Status: admittedStatus,
+					},
+				},
+			},
+		},
+	}
+	return route
 }

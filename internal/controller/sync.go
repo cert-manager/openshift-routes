@@ -45,10 +45,16 @@ const (
 	ReasonInvalidKey             = `InvalidKey`
 	ReasonInvalidValue           = `InvalidValue`
 	ReasonInternalReconcileError = `InternalReconcileError`
+	ReasonMissingHostname        = `MissingHostname`
 )
 
+const DefaultCertificateDuration = time.Hour * 24 * 90 // 90 days
+
 // sync reconciles an Openshift route.
-func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.Route) (result reconcile.Result, err error) {
+func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.Route) (reconcile.Result, error) {
+	var result reconcile.Result
+	var err error
+
 	log := r.log.WithName("sync").WithValues("route", req, "resourceVersion", route.ObjectMeta.ResourceVersion)
 	defer func() {
 		// Always send a warning event if err is not nil
@@ -62,47 +68,59 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 	if r.hasValidCertificate(route) {
 		result, err = reconcile.Result{RequeueAfter: r.getRequeueAfterDuration(route)}, nil
 		log.V(5).Info("route has valid cert")
-		return
+		return result, err
 	}
 	// Do we have a revision? If not set revision to 0
 	revision, err := getCurrentRevision(route)
 	if err != nil {
 		err = r.setRevision(ctx, route, 0)
 		log.V(5).Info("generated revision 0")
-		return
+		return result, err
 	}
 	// Do we have a next key?
 	if !r.hasNextPrivateKey(route) {
 		err = r.generateNextPrivateKey(ctx, route)
 		log.V(5).Info("generated next private key for route")
-		return
+		return result, err
 	}
 	// Is there a CertificateRequest for the Next revision? If not, make it.
 	hasNext, err := r.hasNextCR(ctx, route, revision)
 	if err != nil {
-		// err above is the returned err - named returns parameters + bare returns can be confusing
-		return
+		return result, err
 	}
 	if !hasNext {
-		// create CR and return. We own the CR so it will cause a re-reconcile
+		// generate manifest for new CR
 		log.V(5).Info("route has no matching certificate request", "revision", revision)
-		err = r.createNextCR(ctx, route, revision)
-		return
+		var cr *cmapi.CertificateRequest
+		cr, err = r.buildNextCR(ctx, route, revision)
+		if err != nil {
+			log.V(1).Error(err, "error generating certificate request", "object", req.NamespacedName)
+			// Not a reconcile error, so don't retry this revision
+			return result, nil
+		}
+
+		// create CR and return. We own the CR so it will cause a re-reconcile
+		_, err = r.certClient.CertmanagerV1().CertificateRequests(route.Namespace).Create(ctx, cr, metav1.CreateOptions{})
+		if err != nil {
+			return result, err
+		}
+		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new CertificateRequest for Route %s")
+		return result, nil
+
 	}
 	// is the CR Ready and Approved?
 	ready, cr, err := r.certificateRequestReadyAndApproved(ctx, route, revision)
 	if err != nil {
-		// err above is the returned err - named returns parameters + bare returns can be confusing
-		return
+		return result, err
 	}
 	if !ready {
 		log.V(5).Info("cr is not ready yet")
-		return
+		return result, nil
 	}
 	// Cert is ready. Populate the route.
 	err = r.populateRoute(ctx, route, cr, revision)
 	log.V(5).Info("populated route cert")
-	return
+	return result, err
 }
 
 func (r *Route) hasValidCertificate(route *routev1.Route) bool {
@@ -145,9 +163,12 @@ func (r *Route) hasValidCertificate(route *routev1.Route) bool {
 		return false
 	}
 	// Cert matches Route hostname?
-	if err := cert.VerifyHostname(route.Spec.Host); err != nil {
-		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Issuing cert as the hostname does not match the certificate")
-		return false
+	hostnames := getRouteHostnames(route)
+	for _, host := range hostnames {
+		if err := cert.VerifyHostname(host); err != nil {
+			r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Issuing cert as the hostname does not match the certificate")
+			return false
+		}
 	}
 	// Still not after the renew-before window?
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RenewBeforeAnnotationKey) {
@@ -274,12 +295,14 @@ func (r *Route) findNextCR(ctx context.Context, route *routev1.Route, revision i
 	return nil, fmt.Errorf("multiple certificateRequests found for this route at revision " + strconv.Itoa(revision))
 }
 
-func (r *Route) createNextCR(ctx context.Context, route *routev1.Route, revision int) error {
+// buildNextCR generates the manifest of a Certificate Request that is needed for a given Route and revision
+// This method expects that the private key has already been generated and added as an annotation on the route
+func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision int) (*cmapi.CertificateRequest, error) {
 	var key crypto.Signer
 	// get private key from route
 	k2, err := utilpki.DecodePrivateKeyBytes([]byte(route.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	key = k2
 
@@ -290,18 +313,22 @@ func (r *Route) createNextCR(ctx context.Context, route *routev1.Route, revision
 			"object", route.Namespace+"/"+route.Name, cmapi.DurationAnnotationKey,
 			route.Annotations[cmapi.DurationAnnotationKey])
 		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidKey, "annotation "+cmapi.DurationAnnotationKey+": "+route.Annotations[cmapi.DurationAnnotationKey]+" is not a valid duration")
-		// Not a reconcile error, so stop.
-		return nil
+		return nil, fmt.Errorf("Invalid duration annotation on Route %s/%s", route.Namespace, route.Name)
+	}
+
+	var dnsNames []string
+	// Get the canonical hostname(s) of the Route (from .spec.host or .spec.subdomain)
+	dnsNames = getRouteHostnames(route)
+	if len(dnsNames) == 0 {
+		err := fmt.Errorf("Route is not yet initialized with a hostname")
+		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonMissingHostname, fmt.Sprint(err))
+		return nil, err
 	}
 
 	// Parse out SANs
-	var dnsNames []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.AltNamesAnnotationKey) {
 		altNames := strings.Split(route.Annotations[cmapi.AltNamesAnnotationKey], ",")
 		dnsNames = append(dnsNames, altNames...)
-	}
-	if len(route.Spec.Host) > 0 {
-		dnsNames = append(dnsNames, route.Spec.Host)
 	}
 	var ipSans []net.IP
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
@@ -342,7 +369,7 @@ func (r *Route) createNextCR(ctx context.Context, route *routev1.Route, revision
 		key,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	csrPEM := pem.EncodeToMemory(&pem.Block{
 		Type:  "CERTIFICATE REQUEST",
@@ -378,8 +405,7 @@ func (r *Route) createNextCR(ctx context.Context, route *routev1.Route, revision
 		cr.Spec.Usages = append(cr.Spec.Usages, cmapi.UsageClientAuth)
 	}
 
-	_, err = r.certClient.CertmanagerV1().CertificateRequests(route.Namespace).Create(ctx, cr, metav1.CreateOptions{})
-	return err
+	return cr, nil
 }
 
 func (r *Route) certificateRequestReadyAndApproved(ctx context.Context, route *routev1.Route, revision int) (bool, *cmapi.CertificateRequest, error) {
@@ -476,7 +502,7 @@ func (r *Route) getRequeueAfterDuration(route *routev1.Route) time.Duration {
 }
 
 func certDurationFromRoute(r *routev1.Route) (time.Duration, error) {
-	duration := time.Hour * 24 * 90
+	duration := DefaultCertificateDuration
 	durationAnnotation, exists := r.Annotations[cmapi.DurationAnnotationKey]
 	if exists {
 		durationOverride, err := time.ParseDuration(durationAnnotation)
@@ -486,4 +512,36 @@ func certDurationFromRoute(r *routev1.Route) (time.Duration, error) {
 		duration = durationOverride
 	}
 	return duration, nil
+}
+
+// This function returns the hostnames that have been admitted by an Ingress Controller.
+// Usually this is just `.spec.host`, but as of OpenShift 4.11 users may also specify `.spec.subdomain`,
+// in which case the fully qualified hostname is derived from the hostname of the Ingress Controller.
+// In both cases, the final hostname is reflected in `.status.ingress[].host`.
+// Note that a Route can be admitted by multiple ingress controllers, so it may have multiple hostnames.
+func getRouteHostnames(r *routev1.Route) []string {
+	hostnames := []string{}
+	for _, ing := range r.Status.Ingress {
+		// Iterate over all Ingress Controllers which have admitted the Route
+		for i := range ing.Conditions {
+			if ing.Conditions[i].Type == "Admitted" && ing.Conditions[i].Status == "True" {
+				// The same hostname can be exposed by multiple Ingress routers,
+				// but we only want a list of unique hostnames.
+				if !stringInSlice(hostnames, ing.Host) {
+					hostnames = append(hostnames, ing.Host)
+				}
+			}
+		}
+	}
+
+	return hostnames
+}
+
+func stringInSlice(slice []string, s string) bool {
+	for i := range slice {
+		if slice[i] == s {
+			return true
+		}
+	}
+	return false
 }
