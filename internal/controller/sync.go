@@ -387,7 +387,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 
 	default:
 		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeyAlgorithm, "invalid private key algorithm: "+privateKeyAlgorithm)
-		return fmt.Errorf("invalid private key algorithm, %s", privateKeyAlgorithm)
+		return nil, fmt.Errorf("invalid private key algorithm, %s", privateKeyAlgorithm)
 	}
 
 	csr, err := x509.CreateCertificateRequest(
