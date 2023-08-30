@@ -670,6 +670,10 @@ func TestRoute_buildNextCR(t *testing.T) {
 	require.NoError(t, err)
 	rsaPEM, err := utilpki.EncodePKCS8PrivateKey(rsaKey)
 	require.NoError(t, err)
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	ecdsaPEM, err := utilpki.EncodePKCS8PrivateKey(ecdsaKey)
+	require.NoError(t, err)
 
 	tests := []struct {
 		name       string
@@ -797,6 +801,116 @@ func TestRoute_buildNextCR(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name:     "With ECDSA private key algorithm annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(ecdsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.ECDSAKeyAlgorithm),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.ECDSAWithSHA256,
+				PublicKeyAlgorithm: x509.ECDSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP{},
+				URIs:        []*url.URL{},
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "With RSA private key algorithm annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(rsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.RSAKeyAlgorithm),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.SHA256WithRSA,
+				PublicKeyAlgorithm: x509.RSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP{},
+				URIs:        []*url.URL{},
+			},
+			wantErr: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -821,7 +935,13 @@ func TestRoute_buildNextCR(t *testing.T) {
 
 			// check the CSR
 			if tt.wantCSR != nil {
-				csr, err := x509.CreateCertificateRequest(rand.Reader, tt.wantCSR, rsaKey)
+				var privateKey any
+				if tt.wantCSR.PublicKeyAlgorithm == x509.ECDSA {
+					privateKey = ecdsaKey
+				} else if tt.wantCSR.PublicKeyAlgorithm == x509.RSA {
+					privateKey = rsaKey
+				}
+				csr, err := x509.CreateCertificateRequest(rand.Reader, tt.wantCSR, privateKey)
 				assert.NoError(t, err)
 				csrPEM := pem.EncodeToMemory(&pem.Block{
 					Type:  "CERTIFICATE REQUEST",
