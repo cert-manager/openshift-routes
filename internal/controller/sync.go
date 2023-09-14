@@ -102,7 +102,6 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 			// Not a reconcile error, so don't retry this revision
 			return result, nil
 		}
-
 		// create CR and return. We own the CR so it will cause a re-reconcile
 		_, err = r.certClient.CertmanagerV1().CertificateRequests(route.Namespace).Create(ctx, cr, metav1.CreateOptions{})
 		if err != nil {
@@ -110,7 +109,6 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 		}
 		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new CertificateRequest for Route %s")
 		return result, nil
-
 	}
 	// is the CR Ready and Approved?
 	ready, cr, err := r.certificateRequestReadyAndApproved(ctx, route, revision)
@@ -541,7 +539,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 	}
 	var serialNumber string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectSerialNumberAnnotationKey) {
-		serialNumber = route.Annotations[cmapi.SubjectStreetAddressesAnnotationKey]
+		serialNumber = route.Annotations[cmapi.SubjectSerialNumberAnnotationKey]
 	}
 	csr, err := x509.CreateCertificateRequest(
 		rand.Reader,
@@ -577,10 +575,11 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 
 	var issuerName string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
-		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
-	} else {
 		issuerName = route.Annotations[cmapi.IngressIssuerNameAnnotationKey]
+	} else {
+		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
 	}
+
 	cr := &cmapi.CertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: route.Name + "-",
