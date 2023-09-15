@@ -59,6 +59,13 @@ Install in your cluster using the static manifests:
 oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml
 ```
 
+If you need to install it in a different namespace, you can use:
+
+```bash
+oc process -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml \
+  -p NAMESPACE=<NAMESPACE_NAME> | oc create -f -
+```
+
 If you follow the above prerequisites, use this annotations below
 ```yaml
 ...

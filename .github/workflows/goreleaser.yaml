@@ -30,6 +30,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install yq
+        run: |
+          sudo curl -JL https://github.com/mikefarah/yq/releases/download/v4.35.1/yq_linux_amd64 --output /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
       - name: Run GoReleaser (PR)
         uses: goreleaser/goreleaser-action@v2
         if: "!startsWith(github.ref, 'refs/tags')" # runs on a PR
