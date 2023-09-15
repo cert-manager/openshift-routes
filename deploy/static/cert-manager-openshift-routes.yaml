@@ -114,6 +114,7 @@ spec:
           image: "ghcr.io/cert-manager/cert-manager-openshift-routes:${RELEASED_VERSION}"
           args:
             - -v=5
+            - -leader-election-namespace=kube-system
           ports:
             - containerPort: 6060
               name: readiness
