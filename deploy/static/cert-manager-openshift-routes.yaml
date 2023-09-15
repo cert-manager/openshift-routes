@@ -4,62 +4,62 @@ kind: ClusterRole
 metadata:
   name: cert-manager-openshift-routes
 rules:
-- apiGroups:
-  - route.openshift.io
-  resources:
-  - routes
-  verbs:
-  - get
-  - list
-  - watch
-  - patch
-  - update
-- apiGroups:
-  - route.openshift.io
-  resources:
-  - routes/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - route.openshift.io
-  resources:
-  - routes/custom-host
-  verbs:
-  - create
-  - update
-- apiGroups:
-  - cert-manager.io
-  resources:
-  - certificaterequests
-  verbs:
-  - create
-  - get
-  - list
-  - watch
-- apiGroups:
-    - cert-manager.io
-  resources:
-    - certificaterequests/status
-  verbs:
-    - get
-    - list
-    - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - create
-  - get
-  - list
-  - update
+  - apiGroups:
+      - route.openshift.io
+    resources:
+      - routes
+    verbs:
+      - get
+      - list
+      - watch
+      - patch
+      - update
+  - apiGroups:
+      - route.openshift.io
+    resources:
+      - routes/finalizers
+    verbs:
+      - update
+  - apiGroups:
+      - route.openshift.io
+    resources:
+      - routes/custom-host
+    verbs:
+      - create
+      - update
+  - apiGroups:
+      - cert-manager.io
+    resources:
+      - certificaterequests
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - cert-manager.io
+    resources:
+      - certificaterequests/status
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+      - get
+      - list
+      - update
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -77,9 +77,9 @@ roleRef:
   kind: ClusterRole
   name: cert-manager-openshift-routes
 subjects:
-- kind: ServiceAccount
-  name: cert-manager-openshift-routes
-  namespace: cert-manager
+  - kind: ServiceAccount
+    name: cert-manager-openshift-routes
+    namespace: cert-manager
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -113,14 +113,14 @@ spec:
         - name: cert-manager-openshift-routes
           image: "ghcr.io/cert-manager/cert-manager-openshift-routes:$RELEASED_VERSION"
           args:
-          - -v=5
+            - -v=5
           ports:
-          - containerPort: 6060
-            name: readiness
-            protocol: TCP
-          - containerPort: 9402
-            name: metrics
-            protocol: TCP
+            - containerPort: 6060
+              name: readiness
+              protocol: TCP
+            - containerPort: 9402
+              name: metrics
+              protocol: TCP
           readinessProbe:
             httpGet:
               port: readiness
