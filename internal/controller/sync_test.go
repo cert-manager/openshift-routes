@@ -796,8 +796,8 @@ func TestRoute_buildNextCR(t *testing.T) {
 					CommonName: "",
 				},
 				DNSNames:    []string{"some-sub-domain.some-domain.tld", "some-sub-domain.some-other-ic.example.com"},
-				IPAddresses: []net.IP{},
-				URIs:        []*url.URL{},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
 			},
 			wantErr: nil,
 		},
@@ -851,8 +851,8 @@ func TestRoute_buildNextCR(t *testing.T) {
 					CommonName: "",
 				},
 				DNSNames:    []string{"some-host.some-domain.tld"},
-				IPAddresses: []net.IP{},
-				URIs:        []*url.URL{},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
 			},
 			wantErr: nil,
 		},
@@ -906,8 +906,8 @@ func TestRoute_buildNextCR(t *testing.T) {
 					CommonName: "",
 				},
 				DNSNames:    []string{"some-host.some-domain.tld"},
-				IPAddresses: []net.IP{},
-				URIs:        []*url.URL{},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
 			},
 			wantErr: nil,
 		},
@@ -943,11 +943,26 @@ func TestRoute_buildNextCR(t *testing.T) {
 				}
 				csr, err := x509.CreateCertificateRequest(rand.Reader, tt.wantCSR, privateKey)
 				assert.NoError(t, err)
-				csrPEM := pem.EncodeToMemory(&pem.Block{
-					Type:  "CERTIFICATE REQUEST",
-					Bytes: csr,
-				})
-				assert.Equal(t, cr.Spec.Request, csrPEM)
+
+				if tt.wantCSR.PublicKeyAlgorithm == x509.ECDSA {
+					// The signature for a ECDSA CSR varies based on a random number, therefore we can not expect
+					// the CSR to be identical like we can for RSA. Instead, compare the CSR excluding the signature.
+					parsedCSR, err := x509.ParseCertificateRequest(csr)
+					assert.NoError(t, err)
+					assert.Equal(t, tt.wantCSR.DNSNames, parsedCSR.DNSNames)
+					assert.Equal(t, tt.wantCSR.IPAddresses, parsedCSR.IPAddresses)
+					assert.Equal(t, tt.wantCSR.PublicKeyAlgorithm, parsedCSR.PublicKeyAlgorithm)
+					assert.Equal(t, tt.wantCSR.SignatureAlgorithm, parsedCSR.SignatureAlgorithm)
+					assert.Equal(t, tt.wantCSR.Subject.CommonName, parsedCSR.Subject.CommonName)
+					assert.Equal(t, tt.wantCSR.URIs, parsedCSR.URIs)
+
+				} else if tt.wantCSR.PublicKeyAlgorithm == x509.RSA {
+					csrPEM := pem.EncodeToMemory(&pem.Block{
+						Type:  "CERTIFICATE REQUEST",
+						Bytes: csr,
+					})
+					assert.Equal(t, cr.Spec.Request, csrPEM)
+				}
 			}
 
 			// check the events that were generated
@@ -959,7 +974,7 @@ func TestRoute_buildNextCR(t *testing.T) {
 				}
 				sort.Strings(tt.wantEvents)
 				sort.Strings(gotEvents)
-				assert.Equal(t, tt.wantEvents, gotEvents, "createNextCR() events")
+				assert.Equal(t, tt.wantEvents, gotEvents, "buildNextCR() events")
 			}
 
 		})
