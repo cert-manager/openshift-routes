@@ -51,13 +51,24 @@ CNAME:
   Alias: your-lb-domain.cloud
 ```
 
-## Usage
+## Installation
 
-Install in your cluster using the static manifests:
+The openshift-routes component can be installed using the static manifests:
 
 ```shell
 oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml
 ```
+
+or with the provided Helm chart:
+
+```shell
+git clone https://github.com/cert-manager/openshift-routes.git
+helm install "openshift-routes" ./openshift-routes/deploy/chart
+```
+
+Please review the [values.yaml](./deploy/chart/values.yaml) file for all configuration options.
+
+## Usage
 
 If you follow the above prerequisites, use this annotations below
 ```yaml
