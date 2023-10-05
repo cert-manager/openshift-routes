@@ -191,10 +191,10 @@ func (r *Route) hasValidCertificate(route *routev1.Route) bool {
 			)
 		}
 	}
-	// As there is no renew-before, is the cert less than 2/3 through its life?
+	// As there is no renew-before, is the cert more than 2/3 through its life?
 	totalDuration := cert.NotAfter.Sub(cert.NotBefore)
 	timeToExpiry := cert.NotAfter.Sub(time.Now())
-	if timeToExpiry < (totalDuration * 2 / 3) {
+	if timeToExpiry < (totalDuration * 1 / 3) {
 		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Issuing cert as the existing cert is more than 2/3 through its validity period")
 		return false
 	}
