@@ -13,7 +13,7 @@ OpenShift routes from any cert-manager Issuer.
 through the method of your choice. But make sure you install cert-manager and openshift-routes-deployment in the same namespace. By default this is in the namespace **cert-manager**.
 For example, with the regular manifest:
 ```sh
-oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.8.0/cert-manager.yaml
+oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.12.1/cert-manager.yaml
 ```
 Both **ClusterIssuer** and namespace based **Issuer** are possible. Here a **ClusterIssuer** is used:
 
@@ -90,6 +90,7 @@ metadata:
     cert-manager.io/alt-names: "mycooldomain.com,mysecondarydomain.com" # Optional, no default
     cert-manager.io/ip-sans: "10.20.30.40,192.168.192.168" # Optional, no default
     cert-manager.io/uri-sans: "spiffe://trustdomain/workload" # Optional, no default
+    cert-manager.io/private-key-algorithm: "ECDSA" # Optional, defaults to RSA
 spec:
   host: app.service.clustername.domain.com # will be added to the Subject Alternative Names of the CertificateRequest
   port:

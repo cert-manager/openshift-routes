@@ -455,13 +455,14 @@ SOME GARBAGE
 
 func TestRoute_generateNextPrivateKey(t *testing.T) {
 	tests := []struct {
-		name         string
-		route        *routev1.Route
-		want         error
-		wantedEvents []string
+		name                   string
+		route                  *routev1.Route
+		want                   error
+		wantedEvents           []string
+		wantedPrivateKeyHeader string
 	}{
 		{
-			name: "route has no private key",
+			name: "route without algorithm annotation has no private key",
 			route: &routev1.Route{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "some-route",
@@ -473,8 +474,69 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 				},
 				Spec: routev1.RouteSpec{},
 			},
-			want:         nil,
-			wantedEvents: []string{"Normal Issuing Generated Private Key for route"},
+			want:                   nil,
+			wantedEvents:           []string{"Normal Issuing Generated Private Key for route"},
+			wantedPrivateKeyHeader: "BEGIN RSA PRIVATE KEY",
+		},
+		{
+			name: "route with rsa algorithm annotation has no private key",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:          "some-issuer",
+						cmapi.PrivateKeyAlgorithmAnnotationKey: "RSA",
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+			},
+			want:                   nil,
+			wantedEvents:           []string{"Normal Issuing Generated Private Key for route"},
+			wantedPrivateKeyHeader: "BEGIN RSA PRIVATE KEY",
+		},
+		{
+			name: "route with ecdsa algorithm annotation has no private key",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:          "some-issuer",
+						cmapi.PrivateKeyAlgorithmAnnotationKey: "ECDSA",
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+			},
+			want:                   nil,
+			wantedEvents:           []string{"Normal Issuing Generated Private Key for route"},
+			wantedPrivateKeyHeader: "BEGIN EC PRIVATE KEY",
+		},
+		{
+			name: "route with invalid algorithm annotation has no private key",
+			route: &routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "some-route",
+					Namespace:         "some-namespace",
+					CreationTimestamp: metav1.Time{Time: time.Now().Add(-time.Hour * 24 * 30)},
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:          "some-issuer",
+						cmapi.PrivateKeyAlgorithmAnnotationKey: "notreal",
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+			},
+			want:                   fmt.Errorf("invalid private key algorithm: notreal"),
+			wantedEvents:           []string{"Warning InvalidPrivateKeyAlgorithm invalid private key algorithm: notreal"},
+			wantedPrivateKeyHeader: "",
 		},
 	}
 	for _, tt := range tests {
@@ -497,10 +559,14 @@ func TestRoute_generateNextPrivateKey(t *testing.T) {
 			sort.Strings(tt.wantedEvents)
 			sort.Strings(gotEvents)
 			assert.Equal(t, tt.wantedEvents, gotEvents, "hasNextPrivateKey() events")
-			actualRoute, err := fakeClient.RouteV1().Routes(tt.route.Namespace).Get(context.TODO(), tt.route.Name, metav1.GetOptions{})
-			assert.NoError(t, err)
-			_, err = utilpki.DecodePrivateKeyBytes([]byte(actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
-			assert.NoError(t, err)
+			// If generating the private key failed, there would not be a key to decode/validate
+			if tt.want == nil {
+				actualRoute, err := fakeClient.RouteV1().Routes(tt.route.Namespace).Get(context.TODO(), tt.route.Name, metav1.GetOptions{})
+				assert.NoError(t, err)
+				_, err = utilpki.DecodePrivateKeyBytes([]byte(actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
+				assert.NoError(t, err)
+				assert.Contains(t, actualRoute.Annotations[cmapi.IsNextPrivateKeySecretLabelKey], tt.wantedPrivateKeyHeader)
+			}
 		})
 	}
 }
@@ -603,6 +669,10 @@ func TestRoute_buildNextCR(t *testing.T) {
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	require.NoError(t, err)
 	rsaPEM, err := utilpki.EncodePKCS8PrivateKey(rsaKey)
+	require.NoError(t, err)
+	ecdsaKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	ecdsaPEM, err := utilpki.EncodePKCS8PrivateKey(ecdsaKey)
 	require.NoError(t, err)
 
 	tests := []struct {
@@ -726,8 +796,118 @@ func TestRoute_buildNextCR(t *testing.T) {
 					CommonName: "",
 				},
 				DNSNames:    []string{"some-sub-domain.some-domain.tld", "some-sub-domain.some-other-ic.example.com"},
-				IPAddresses: []net.IP{},
-				URIs:        []*url.URL{},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "With ECDSA private key algorithm annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(ecdsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.ECDSAKeyAlgorithm),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.ECDSAWithSHA256,
+				PublicKeyAlgorithm: x509.ECDSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "With RSA private key algorithm annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(rsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.RSAKeyAlgorithm),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.SHA256WithRSA,
+				PublicKeyAlgorithm: x509.RSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
 			},
 			wantErr: nil,
 		},
@@ -755,13 +935,34 @@ func TestRoute_buildNextCR(t *testing.T) {
 
 			// check the CSR
 			if tt.wantCSR != nil {
-				csr, err := x509.CreateCertificateRequest(rand.Reader, tt.wantCSR, rsaKey)
+				var privateKey any
+				if tt.wantCSR.PublicKeyAlgorithm == x509.ECDSA {
+					privateKey = ecdsaKey
+				} else if tt.wantCSR.PublicKeyAlgorithm == x509.RSA {
+					privateKey = rsaKey
+				}
+				csr, err := x509.CreateCertificateRequest(rand.Reader, tt.wantCSR, privateKey)
 				assert.NoError(t, err)
-				csrPEM := pem.EncodeToMemory(&pem.Block{
-					Type:  "CERTIFICATE REQUEST",
-					Bytes: csr,
-				})
-				assert.Equal(t, cr.Spec.Request, csrPEM)
+
+				if tt.wantCSR.PublicKeyAlgorithm == x509.ECDSA {
+					// The signature for a ECDSA CSR varies based on a random number, therefore we can not expect
+					// the CSR to be identical like we can for RSA. Instead, compare the CSR excluding the signature.
+					parsedCSR, err := x509.ParseCertificateRequest(csr)
+					assert.NoError(t, err)
+					assert.Equal(t, tt.wantCSR.DNSNames, parsedCSR.DNSNames)
+					assert.Equal(t, tt.wantCSR.IPAddresses, parsedCSR.IPAddresses)
+					assert.Equal(t, tt.wantCSR.PublicKeyAlgorithm, parsedCSR.PublicKeyAlgorithm)
+					assert.Equal(t, tt.wantCSR.SignatureAlgorithm, parsedCSR.SignatureAlgorithm)
+					assert.Equal(t, tt.wantCSR.Subject.CommonName, parsedCSR.Subject.CommonName)
+					assert.Equal(t, tt.wantCSR.URIs, parsedCSR.URIs)
+
+				} else if tt.wantCSR.PublicKeyAlgorithm == x509.RSA {
+					csrPEM := pem.EncodeToMemory(&pem.Block{
+						Type:  "CERTIFICATE REQUEST",
+						Bytes: csr,
+					})
+					assert.Equal(t, cr.Spec.Request, csrPEM)
+				}
 			}
 
 			// check the events that were generated
@@ -773,7 +974,7 @@ func TestRoute_buildNextCR(t *testing.T) {
 				}
 				sort.Strings(tt.wantEvents)
 				sort.Strings(gotEvents)
-				assert.Equal(t, tt.wantEvents, gotEvents, "createNextCR() events")
+				assert.Equal(t, tt.wantEvents, gotEvents, "buildNextCR() events")
 			}
 
 		})
