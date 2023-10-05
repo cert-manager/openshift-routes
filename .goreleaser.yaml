@@ -128,6 +128,9 @@ docker_manifests:
 checksum:
   name_template: 'checksums.txt'
 release:
+  draft: true
+  replace_existing_draft: true
   extra_files:
     - glob: ./cert-manager-openshift-routes-*.yaml
       name_template: cert-manager-openshift-routes.yaml
+
