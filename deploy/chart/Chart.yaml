@@ -7,3 +7,6 @@ type: application
 # to the chart and its templates, including the app version.
 # Versions are expected to follow Semantic Versioning (https://semver.org/)
 version: 0.1.0
+
+# This is the version of the application, i.e. openshift-routes
+appVersion: 0.2.0

@@ -7,13 +7,21 @@ fullnameOverride: ""
 
 image:
   # https://github.com/cert-manager/openshift-routes/pkgs/container/cert-manager-openshift-routes
-  registry: ghcr.io
-  repository: cert-manager/cert-manager-openshift-routes
-  # the final image is generated as "${registry}/${repostiory}:${tag}"
-  tag: "0.2.0"
-  # if "digest" is set, overrides "tag"
-  # digest: "sha256:..."
-  pullPolicy: IfNotPresent
+  # the final image is generated as "${registry}/${repostiory}:${tag|digest}"
+
+  # -- Target image repository.
+  repository: ghcr.io/cert-manager/cert-manager-openshift-routes
+  # -- Target image registry. Will be prepended to the target image repositry if set.
+  registry:
+
+  # -- Target image version tag. Defaults to the chart's appVersion.
+  tag:
+
+  # -- Target image digest. Will override any tag if set.
+  # for example:
+  # digest: sha256:0e072dddd1f7f8fc8909a2ca6f65e76c5f0d2fcfb8be47935ae3457e8bbceb20
+  digest:
+
 
 imagePullSecrets: []
 

@@ -30,7 +30,7 @@ spec:
         - name: openshift-routes
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: {{ include "openshift-routes.image" . }}
+          image: "{{ template "openshift-routes.image" (tuple .Values.image $.Chart.AppVersion) }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - "-v={{ .Values.logLevel }}"
