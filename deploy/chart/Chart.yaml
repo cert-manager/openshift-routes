@@ -1,0 +1,12 @@
+apiVersion: v2
+name: openshift-routes
+description: A Helm chart to deploy openshift-routes adapter for cert-manager on Kubernetes
+type: application
+
+# This is the chart version. This version number should be incremented each time you make changes
+# to the chart and its templates, including the app version.
+# Versions are expected to follow Semantic Versioning (https://semver.org/)
+version: 0.1.0
+
+# This is the version of the application, i.e. openshift-routes
+appVersion: 0.2.0
