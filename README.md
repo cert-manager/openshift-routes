@@ -5,7 +5,8 @@
 # OpenShift Route Support for cert-manager
 
 This project supports automatically getting a certificate for
-OpenShift routes from any cert-manager Issuer.
+OpenShift routes from any cert-manager Issuer, similar to annotating
+an Ingress or Gateway resource in vanilla Kubernetes!
 
 ## Prerequisites:
 
@@ -14,7 +15,7 @@ OpenShift routes from any cert-manager Issuer.
    For example, with the regular manifest:
 
 ```sh
-oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.12.1/cert-manager.yaml
+oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.12.6/cert-manager.yaml
 ```
 
 Both **ClusterIssuer** and namespace based **Issuer** are possible. Here a **ClusterIssuer** is used:
