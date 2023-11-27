@@ -44,6 +44,7 @@ const (
 	ReasonIssuing                    = `Issuing`
 	ReasonInvalidKey                 = `InvalidKey`
 	ReasonInvalidPrivateKeyAlgorithm = `InvalidPrivateKeyAlgorithm`
+	ReasonInvalidPrivateKeySize      = `InvalidPrivateKeySize`
 	ReasonInvalidValue               = `InvalidValue`
 	ReasonInternalReconcileError     = `InternalReconcileError`
 	ReasonMissingHostname            = `MissingHostname`
@@ -219,16 +220,35 @@ func (r *Route) generateNextPrivateKey(ctx context.Context, route *routev1.Route
 	if !found {
 		privateKeyAlgorithm = string(cmapi.RSAKeyAlgorithm)
 	}
+
+	var privateKeySize int
+	privateKeySizeStr, found := route.Annotations[cmapi.PrivateKeySizeAnnotationKey]
+	if found {
+		var err error
+		privateKeySize, err = strconv.Atoi(privateKeySizeStr)
+		if err != nil {
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeySize, "invalid private key size:"+privateKeySizeStr)
+			return fmt.Errorf("invalid private key size, %s: %v", privateKeySizeStr, err)
+		}
+	} else {
+		switch privateKeyAlgorithm {
+		case string(cmapi.ECDSAKeyAlgorithm):
+			privateKeySize = utilpki.ECCurve256
+		case string(cmapi.RSAKeyAlgorithm):
+			privateKeySize = utilpki.MinRSAKeySize
+		}
+	}
+
 	var privateKey crypto.PrivateKey
 	var err error
 	switch privateKeyAlgorithm {
 	case string(cmapi.ECDSAKeyAlgorithm):
-		privateKey, err = utilpki.GenerateECPrivateKey(utilpki.ECCurve256)
+		privateKey, err = utilpki.GenerateECPrivateKey(privateKeySize)
 		if err != nil {
 			return fmt.Errorf("could not generate ECDSA key: %w", err)
 		}
 	case string(cmapi.RSAKeyAlgorithm):
-		privateKey, err = utilpki.GenerateRSAPrivateKey(utilpki.MinRSAKeySize)
+		privateKey, err = utilpki.GenerateRSAPrivateKey(privateKeySize)
 		if err != nil {
 			return fmt.Errorf("could not generate RSA Key: %w", err)
 		}
@@ -374,15 +394,42 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		privateKeyAlgorithm = string(cmapi.RSAKeyAlgorithm)
 	}
 
+	var privateKeySize int
+	privateKeySizeStr, found := route.Annotations[cmapi.PrivateKeySizeAnnotationKey]
+	if found {
+		privateKeySize, err = strconv.Atoi(privateKeySizeStr)
+		if err != nil {
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeySize, "invalid private key size:"+privateKeySizeStr)
+			return nil, fmt.Errorf("invalid private key size, %s: %v", privateKeySizeStr, err)
+		}
+	}
+
 	var signatureAlgorithm x509.SignatureAlgorithm
 	var publicKeyAlgorithm x509.PublicKeyAlgorithm
 	switch privateKeyAlgorithm {
 	case string(cmapi.ECDSAKeyAlgorithm):
-		signatureAlgorithm = x509.ECDSAWithSHA256
+		switch privateKeySize {
+		case 521:
+			signatureAlgorithm = x509.ECDSAWithSHA512
+		case 384:
+			signatureAlgorithm = x509.ECDSAWithSHA384
+		case 256:
+			signatureAlgorithm = x509.ECDSAWithSHA256
+		default:
+			signatureAlgorithm = x509.ECDSAWithSHA256
+		}
 		publicKeyAlgorithm = x509.ECDSA
-
 	case string(cmapi.RSAKeyAlgorithm):
-		signatureAlgorithm = x509.SHA256WithRSA
+		switch {
+		case privateKeySize >= 4096:
+			signatureAlgorithm = x509.SHA512WithRSA
+		case privateKeySize >= 3072:
+			signatureAlgorithm = x509.SHA384WithRSA
+		case privateKeySize >= 2048:
+			signatureAlgorithm = x509.SHA256WithRSA
+		default:
+			signatureAlgorithm = x509.SHA256WithRSA
+		}
 		publicKeyAlgorithm = x509.RSA
 
 	default:
