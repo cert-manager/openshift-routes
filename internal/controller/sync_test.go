@@ -30,6 +30,7 @@ import (
 	"net"
 	"net/url"
 	"sort"
+	"strconv"
 	"testing"
 	"time"
 
@@ -857,6 +858,118 @@ func TestRoute_buildNextCR(t *testing.T) {
 			wantErr: nil,
 		},
 		{
+			name:     "With ECDSA 384 private key algorithm and size annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(ecdsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.ECDSAKeyAlgorithm),
+						cmapi.PrivateKeySizeAnnotationKey:      strconv.Itoa(384),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.ECDSAWithSHA256,
+				PublicKeyAlgorithm: x509.ECDSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "With ECDSA 521 private key algorithm and size annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(ecdsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.ECDSAKeyAlgorithm),
+						cmapi.PrivateKeySizeAnnotationKey:      strconv.Itoa(521),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.ECDSAWithSHA256,
+				PublicKeyAlgorithm: x509.ECDSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
+			},
+			wantErr: nil,
+		},
+		{
 			name:     "With RSA private key algorithm annotation",
 			revision: 1337,
 			route: generateRouteStatus(&routev1.Route{
@@ -901,6 +1014,118 @@ func TestRoute_buildNextCR(t *testing.T) {
 			},
 			wantCSR: &x509.CertificateRequest{
 				SignatureAlgorithm: x509.SHA256WithRSA,
+				PublicKeyAlgorithm: x509.RSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "With RSA 3072 private key algorithm and size annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(rsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.RSAKeyAlgorithm),
+						cmapi.PrivateKeySizeAnnotationKey:      strconv.Itoa(3072),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.SHA384WithRSA,
+				PublicKeyAlgorithm: x509.RSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:    []string{"some-host.some-domain.tld"},
+				IPAddresses: []net.IP(nil),
+				URIs:        []*url.URL(nil),
+			},
+			wantErr: nil,
+		},
+		{
+			name:     "With RSA 3072 private key algorithm and size annotation",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey:   string(rsaPEM),
+						cmapi.PrivateKeyAlgorithmAnnotationKey: string(cmapi.RSAKeyAlgorithm),
+						cmapi.PrivateKeySizeAnnotationKey:      strconv.Itoa(4096),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.SHA512WithRSA,
 				PublicKeyAlgorithm: x509.RSA,
 				Subject: pkix.Name{
 					CommonName: "",
