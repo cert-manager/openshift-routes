@@ -2,7 +2,13 @@ project_name: cert-manager-openshift-routes
 before:
   hooks:
     - go test -v ./...
+    # update static manifests
     - ./hack/generate-static-manifest.sh {{ .Version }}
+    # update and package new Helm chart
+    - helm package ./deploy/chart --version {{ trimprefix .Version "v"}} --app-version {{ .Version }}
+    # upload Helm chart as OCI artifact to GitHub Container Registry
+    - '{{if .IsSnapshot}}echo SKIPPING: {{end}}helm push ./openshift-routes-{{ trimprefix .Version "v"}}.tgz oci://ghcr.io/cert-manager/charts'
+
 builds:
   - id: cert-manager-openshift-routes
     main: ./internal/cmd
@@ -19,8 +25,8 @@ builds:
       - riscv64
       - ppc64le
     goarm:
-      - '6'
-      - '7'
+      - "6"
+      - "7"
 archives:
   - format: tar.gz
     format_overrides:
@@ -126,11 +132,12 @@ docker_manifests:
       - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-riscv64
       - ghcr.io/cert-manager/cert-manager-openshift-routes:{{ .Version }}-ppc64le
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
 release:
   draft: true
   replace_existing_draft: true
   extra_files:
     - glob: ./cert-manager-openshift-routes-*.yaml
       name_template: cert-manager-openshift-routes.yaml
-
+    - glob: ./openshift-routes-*.tgz
+      name_template: openshift-routes-chart.tgz
