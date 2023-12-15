@@ -62,11 +62,10 @@ The openshift-routes component can be installed using the static manifests:
 oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml
 ```
 
-or with the provided Helm chart:
+or with the Helm chart:
 
 ```shell
-git clone https://github.com/cert-manager/openshift-routes.git
-helm install "openshift-routes" ./openshift-routes/deploy/chart
+helm install openshift-routes -n cert-manager oci://ghcr.io/cert-manager/charts/openshift-routes
 ```
 
 Please review the [values.yaml](./deploy/chart/values.yaml) file for all configuration options.
