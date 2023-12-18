@@ -104,6 +104,7 @@ metadata:
     cert-manager.io/ip-sans: "10.20.30.40,192.168.192.168" # Optional, no default
     cert-manager.io/uri-sans: "spiffe://trustdomain/workload" # Optional, no default
     cert-manager.io/private-key-algorithm: "ECDSA" # Optional, defaults to RSA
+    cert-manager.io/private-key-size: "384" # Optional, defaults to 265 for ECDSA and 2048 for RSA
 spec:
   host: app.service.clustername.domain.com # will be added to the Subject Alternative Names of the CertificateRequest
   port:
