@@ -388,6 +388,10 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			uriSans = append(uriSans, ur)
 		}
 	}
+	emailSans := []string{}
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.EmailsAnnotationKey) {
+		emailSans = strings.Split(route.Annotations[cmapi.EmailsAnnotationKey], ",")
+	}
 
 	privateKeyAlgorithm, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
 	if !found {
@@ -446,9 +450,10 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			Subject: pkix.Name{
 				CommonName: route.Annotations[cmapi.CommonNameAnnotationKey],
 			},
-			DNSNames:    dnsNames,
-			IPAddresses: ipSans,
-			URIs:        uriSans,
+			DNSNames:       dnsNames,
+			IPAddresses:    ipSans,
+			URIs:           uriSans,
+			EmailAddresses: emailSans,
 		},
 		key,
 	)

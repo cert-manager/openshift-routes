@@ -1136,6 +1136,65 @@ func TestRoute_buildNextCR(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name:     "With subject alternative names",
+			revision: 1337,
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "some-route",
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IsNextPrivateKeySecretLabelKey: string(rsaPEM),
+						cmapi.AltNamesAnnotationKey:          "mycooldomain.com,mysecondarydomain.com",
+						cmapi.IPSANAnnotationKey:             "10.20.30.40,192.168.192.168",
+						cmapi.URISANAnnotationKey:            "spiffe://trustdomain/workload",
+						cmapi.EmailsAnnotationKey:            "me@example.com,you@example.com",
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: "some-host.some-domain.tld",
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: "some-host.some-domain.tld",
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.CertificateRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					GenerateName: "some-route-",
+					Namespace:    "some-namespace",
+					Annotations: map[string]string{
+						cmapi.CertificateRequestRevisionAnnotationKey: "1338",
+					},
+				},
+				Spec: cmapi.CertificateRequestSpec{
+					Usages:   []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration: &metav1.Duration{Duration: DefaultCertificateDuration},
+				},
+			},
+			wantCSR: &x509.CertificateRequest{
+				SignatureAlgorithm: x509.SHA256WithRSA,
+				PublicKeyAlgorithm: x509.RSA,
+				Subject: pkix.Name{
+					CommonName: "",
+				},
+				DNSNames:       []string{"some-host.some-domain.tld", "mycooldomain.com", "mysecondarydomain.com"},
+				IPAddresses:    []net.IP{net.IPv4(10, 20, 30, 40), net.IPv4(192, 168, 192, 168)},
+				URIs:           []*url.URL{{Scheme: "spiffe", Host: "trustdomain", Path: "workload"}},
+				EmailAddresses: []string{"me@example.com", "you@example.com"},
+			},
+			wantErr: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1176,6 +1235,7 @@ func TestRoute_buildNextCR(t *testing.T) {
 					assert.NoError(t, err)
 					assert.Equal(t, tt.wantCSR.DNSNames, parsedCSR.DNSNames)
 					assert.Equal(t, tt.wantCSR.IPAddresses, parsedCSR.IPAddresses)
+					assert.Equal(t, tt.wantCSR.EmailAddresses, parsedCSR.EmailAddresses)
 					assert.Equal(t, tt.wantCSR.PublicKeyAlgorithm, parsedCSR.PublicKeyAlgorithm)
 					assert.Equal(t, tt.wantCSR.SignatureAlgorithm, parsedCSR.SignatureAlgorithm)
 					assert.Equal(t, tt.wantCSR.Subject.CommonName, parsedCSR.Subject.CommonName)
