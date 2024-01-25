@@ -43,6 +43,30 @@ type Route struct {
 	log logr.Logger
 }
 
+func shouldSync(log logr.Logger, route *routev1.Route) bool {
+	if len(route.ObjectMeta.OwnerReferences) > 0 {
+		for _, o := range route.ObjectMeta.OwnerReferences {
+			if o.Kind == "Ingress" {
+				log.V(5).Info("Route is owned by an Ingress")
+				return false
+			}
+		}
+	}
+
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IssuerNameAnnotationKey) {
+		log.V(5).Info("Route has the annotation %s=%s", cmapi.IssuerNameAnnotationKey, route.Annotations[cmapi.IssuerNameAnnotationKey])
+		return true
+	}
+
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
+		log.V(5).Info("Route has the annotation %s=%s", cmapi.IngressIssuerNameAnnotationKey, route.Annotations[cmapi.IngressIssuerNameAnnotationKey])
+		return true
+	}
+
+	log.V(5).Info("Route does not have the cert-manager issuer annotation")
+	return false
+}
+
 func (r *Route) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("object", req.NamespacedName)
 	log.V(5).Info("started reconciling")
@@ -54,12 +78,12 @@ func (r *Route) Reconcile(ctx context.Context, req reconcile.Request) (reconcile
 		return reconcile.Result{}, err
 	}
 	log.V(5).Info("retrieved route")
-	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IssuerNameAnnotationKey) {
-		log.V(5).Info("route has cert-manager annotation, reconciling", cmapi.IssuerNameAnnotationKey, route.Annotations[cmapi.IssuerNameAnnotationKey])
-		return r.sync(ctx, req, route.DeepCopy())
+
+	if !shouldSync(log, route) {
+		return reconcile.Result{}, nil
 	}
-	log.V(5).Info("ignoring route without cert-manager issuer name annotation")
-	return reconcile.Result{}, nil
+
+	return r.sync(ctx, req, route.DeepCopy())
 }
 
 func New(base logr.Logger, config *rest.Config, recorder record.EventRecorder) (*Route, error) {

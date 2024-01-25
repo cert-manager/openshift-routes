@@ -33,6 +33,7 @@ import (
 	cmapiutil "github.com/cert-manager/cert-manager/pkg/api/util"
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	cmutil "github.com/cert-manager/cert-manager/pkg/util"
 	utilpki "github.com/cert-manager/cert-manager/pkg/util/pki"
 	routev1 "github.com/openshift/api/route/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -42,6 +43,7 @@ import (
 
 const (
 	ReasonIssuing                    = `Issuing`
+	ReasonIssued                     = `Issued`
 	ReasonInvalidKey                 = `InvalidKey`
 	ReasonInvalidPrivateKeyAlgorithm = `InvalidPrivateKeyAlgorithm`
 	ReasonInvalidPrivateKeySize      = `InvalidPrivateKeySize`
@@ -100,7 +102,6 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 			// Not a reconcile error, so don't retry this revision
 			return result, nil
 		}
-
 		// create CR and return. We own the CR so it will cause a re-reconcile
 		_, err = r.certClient.CertmanagerV1().CertificateRequests(route.Namespace).Create(ctx, cr, metav1.CreateOptions{})
 		if err != nil {
@@ -108,7 +109,6 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 		}
 		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new CertificateRequest for Route %s")
 		return result, nil
-
 	}
 	// is the CR Ready and Approved?
 	ready, cr, err := r.certificateRequestReadyAndApproved(ctx, route, revision)
@@ -121,7 +121,12 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 	}
 	// Cert is ready. Populate the route.
 	err = r.populateRoute(ctx, route, cr, revision)
+	if err != nil {
+		log.V(1).Error(err, "failed to populate route certificate")
+		return result, err
+	}
 	log.V(5).Info("populated route cert")
+	r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssued, "Route updated with issued certificate")
 	return result, err
 }
 
@@ -352,43 +357,6 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		return nil, fmt.Errorf("Invalid duration annotation on Route %s/%s", route.Namespace, route.Name)
 	}
 
-	var dnsNames []string
-	// Get the canonical hostname(s) of the Route (from .spec.host or .spec.subdomain)
-	dnsNames = getRouteHostnames(route)
-	if len(dnsNames) == 0 {
-		err := fmt.Errorf("Route is not yet initialized with a hostname")
-		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonMissingHostname, fmt.Sprint(err))
-		return nil, err
-	}
-
-	// Parse out SANs
-	if metav1.HasAnnotation(route.ObjectMeta, cmapi.AltNamesAnnotationKey) {
-		altNames := strings.Split(route.Annotations[cmapi.AltNamesAnnotationKey], ",")
-		dnsNames = append(dnsNames, altNames...)
-	}
-	var ipSans []net.IP
-	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
-		ipAddresses := strings.Split(route.Annotations[cmapi.IPSANAnnotationKey], ",")
-		for _, i := range ipAddresses {
-			ip := net.ParseIP(i)
-			if ip != nil {
-				ipSans = append(ipSans, ip)
-			}
-		}
-	}
-	var uriSans []*url.URL
-	if metav1.HasAnnotation(route.ObjectMeta, cmapi.URISANAnnotationKey) {
-		urls := strings.Split(route.Annotations[cmapi.URISANAnnotationKey], ",")
-		for _, u := range urls {
-			ur, err := url.Parse(u)
-			if err != nil {
-				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "Ignoring malformed URI SAN "+u)
-				continue
-			}
-			uriSans = append(uriSans, ur)
-		}
-	}
-
 	privateKeyAlgorithm, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
 	if !found {
 		privateKeyAlgorithm = string(cmapi.RSAKeyAlgorithm)
@@ -437,6 +405,142 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		return nil, fmt.Errorf("invalid private key algorithm, %s", privateKeyAlgorithm)
 	}
 
+	var dnsNames []string
+	// Get the canonical hostname(s) of the Route (from .spec.host or .spec.subdomain)
+	dnsNames = getRouteHostnames(route)
+	if len(dnsNames) == 0 {
+		err := fmt.Errorf("Route is not yet initialized with a hostname")
+		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonMissingHostname, fmt.Sprint(err))
+		return nil, err
+	}
+
+	// Parse out SANs
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.AltNamesAnnotationKey) {
+		altNames := strings.Split(route.Annotations[cmapi.AltNamesAnnotationKey], ",")
+		dnsNames = append(dnsNames, altNames...)
+	}
+	var ipSans []net.IP
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
+		ipAddresses := strings.Split(route.Annotations[cmapi.IPSANAnnotationKey], ",")
+		for _, i := range ipAddresses {
+			ip := net.ParseIP(i)
+			if ip != nil {
+				ipSans = append(ipSans, ip)
+			}
+		}
+	}
+	var uriSans []*url.URL
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.URISANAnnotationKey) {
+		urls := strings.Split(route.Annotations[cmapi.URISANAnnotationKey], ",")
+		for _, u := range urls {
+			ur, err := url.Parse(u)
+			if err != nil {
+				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "Ignoring malformed URI SAN "+u)
+				continue
+			}
+			uriSans = append(uriSans, ur)
+		}
+	}
+	var emailAddresses []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.EmailsAnnotationKey) {
+		emailAddresses = strings.Split(route.Annotations[cmapi.EmailsAnnotationKey], ",")
+	}
+	var organizations []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectOrganizationsAnnotationKey) {
+		subjectOrganizations, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectOrganizationsAnnotationKey])
+		organizations = subjectOrganizations
+
+		if err != nil {
+			r.log.V(1).Error(err, "the organizations annotation is invalid",
+				"object", route.Namespace+"/"+route.Name, cmapi.SubjectOrganizationsAnnotationKey,
+				route.Annotations[cmapi.SubjectOrganizationsAnnotationKey])
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "annotation "+cmapi.SubjectOrganizationsAnnotationKey+": "+route.Annotations[cmapi.SubjectOrganizationsAnnotationKey]+" value is malformed")
+			return nil, err
+		}
+	}
+	var organizationalUnits []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectOrganizationalUnitsAnnotationKey) {
+		subjectOrganizationalUnits, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectOrganizationalUnitsAnnotationKey])
+		organizationalUnits = subjectOrganizationalUnits
+
+		if err != nil {
+			r.log.V(1).Error(err, "the organizational units annotation is invalid",
+				"object", route.Namespace+"/"+route.Name, cmapi.SubjectOrganizationalUnitsAnnotationKey,
+				route.Annotations[cmapi.SubjectOrganizationalUnitsAnnotationKey])
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "annotation "+cmapi.SubjectOrganizationalUnitsAnnotationKey+": "+route.Annotations[cmapi.SubjectOrganizationalUnitsAnnotationKey]+" value is malformed")
+			return nil, err
+		}
+
+	}
+	var countries []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectCountriesAnnotationKey) {
+		subjectCountries, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectCountriesAnnotationKey])
+		countries = subjectCountries
+
+		if err != nil {
+			r.log.V(1).Error(err, "the countries annotation is invalid",
+				"object", route.Namespace+"/"+route.Name, cmapi.SubjectCountriesAnnotationKey,
+				route.Annotations[cmapi.SubjectCountriesAnnotationKey])
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "annotation "+cmapi.SubjectCountriesAnnotationKey+": "+route.Annotations[cmapi.SubjectCountriesAnnotationKey]+" value is malformed")
+			return nil, err
+		}
+	}
+	var provinces []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectProvincesAnnotationKey) {
+		subjectProvinces, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectProvincesAnnotationKey])
+		provinces = subjectProvinces
+
+		if err != nil {
+			r.log.V(1).Error(err, "the provinces annotation is invalid",
+				"object", route.Namespace+"/"+route.Name, cmapi.SubjectProvincesAnnotationKey,
+				route.Annotations[cmapi.SubjectProvincesAnnotationKey])
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "annotation "+cmapi.SubjectProvincesAnnotationKey+": "+route.Annotations[cmapi.SubjectProvincesAnnotationKey]+" value is malformed")
+			return nil, err
+		}
+	}
+	var localities []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectLocalitiesAnnotationKey) {
+		subjectLocalities, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectLocalitiesAnnotationKey])
+		localities = subjectLocalities
+
+		if err != nil {
+			r.log.V(1).Error(err, "the localities annotation is invalid",
+				"object", route.Namespace+"/"+route.Name, cmapi.SubjectLocalitiesAnnotationKey,
+				route.Annotations[cmapi.SubjectLocalitiesAnnotationKey])
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "annotation "+cmapi.SubjectLocalitiesAnnotationKey+": "+route.Annotations[cmapi.SubjectLocalitiesAnnotationKey]+" value is malformed")
+			return nil, err
+		}
+	}
+	var postalCodes []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectPostalCodesAnnotationKey) {
+		subjectPostalCodes, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectPostalCodesAnnotationKey])
+		postalCodes = subjectPostalCodes
+
+		if err != nil {
+			r.log.V(1).Error(err, "the postal codes annotation is invalid",
+				"object", route.Namespace+"/"+route.Name, cmapi.SubjectPostalCodesAnnotationKey,
+				route.Annotations[cmapi.SubjectPostalCodesAnnotationKey])
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "annotation "+cmapi.SubjectPostalCodesAnnotationKey+": "+route.Annotations[cmapi.SubjectPostalCodesAnnotationKey]+" value is malformed")
+			return nil, err
+		}
+	}
+	var streetAddresses []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectStreetAddressesAnnotationKey) {
+		subjectStreetAddresses, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectStreetAddressesAnnotationKey])
+		streetAddresses = subjectStreetAddresses
+
+		if err != nil {
+			r.log.V(1).Error(err, "the street addresses annotation is invalid",
+				"object", route.Namespace+"/"+route.Name, cmapi.SubjectStreetAddressesAnnotationKey,
+				route.Annotations[cmapi.SubjectStreetAddressesAnnotationKey])
+			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "annotation "+cmapi.SubjectStreetAddressesAnnotationKey+": "+route.Annotations[cmapi.SubjectStreetAddressesAnnotationKey]+" value is malformed")
+			return nil, err
+		}
+	}
+	var serialNumber string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectSerialNumberAnnotationKey) {
+		serialNumber = route.Annotations[cmapi.SubjectSerialNumberAnnotationKey]
+	}
 	csr, err := x509.CreateCertificateRequest(
 		rand.Reader,
 		&x509.CertificateRequest{
@@ -444,11 +548,20 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			SignatureAlgorithm: signatureAlgorithm,
 			PublicKeyAlgorithm: publicKeyAlgorithm,
 			Subject: pkix.Name{
-				CommonName: route.Annotations[cmapi.CommonNameAnnotationKey],
+				CommonName:         route.Annotations[cmapi.CommonNameAnnotationKey],
+				Country:            countries,
+				Locality:           localities,
+				Organization:       organizations,
+				OrganizationalUnit: organizationalUnits,
+				PostalCode:         postalCodes,
+				Province:           provinces,
+				SerialNumber:       serialNumber,
+				StreetAddress:      streetAddresses,
 			},
-			DNSNames:    dnsNames,
-			IPAddresses: ipSans,
-			URIs:        uriSans,
+			EmailAddresses: emailAddresses,
+			DNSNames:       dnsNames,
+			IPAddresses:    ipSans,
+			URIs:           uriSans,
 		},
 		key,
 	)
@@ -459,6 +572,13 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		Type:  "CERTIFICATE REQUEST",
 		Bytes: csr,
 	})
+
+	var issuerName string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
+		issuerName = route.Annotations[cmapi.IngressIssuerNameAnnotationKey]
+	} else {
+		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
+	}
 
 	cr := &cmapi.CertificateRequest{
 		ObjectMeta: metav1.ObjectMeta{
@@ -475,7 +595,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		Spec: cmapi.CertificateRequestSpec{
 			Duration: &metav1.Duration{Duration: duration},
 			IssuerRef: cmmeta.ObjectReference{
-				Name:  route.Annotations[cmapi.IssuerNameAnnotationKey],
+				Name:  issuerName,
 				Kind:  route.Annotations[cmapi.IssuerKindAnnotationKey],
 				Group: route.Annotations[cmapi.IssuerGroupAnnotationKey],
 			},
