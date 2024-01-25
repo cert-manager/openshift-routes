@@ -15,7 +15,7 @@ an Ingress or Gateway resource in vanilla Kubernetes!
    For example, with the regular manifest:
 
 ```sh
-oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.12.6/cert-manager.yaml
+oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.13.3/cert-manager.yaml
 ```
 
 Both **ClusterIssuer** and namespace based **Issuer** are possible. Here a **ClusterIssuer** is used:
@@ -62,11 +62,10 @@ The openshift-routes component can be installed using the static manifests:
 oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml
 ```
 
-or with the provided Helm chart:
+or with the Helm chart:
 
 ```shell
-git clone https://github.com/cert-manager/openshift-routes.git
-helm install "openshift-routes" ./openshift-routes/deploy/chart
+helm install openshift-routes -n cert-manager oci://ghcr.io/cert-manager/charts/openshift-routes
 ```
 
 Please review the [values.yaml](./deploy/chart/values.yaml) file for all configuration options.
@@ -155,9 +154,13 @@ You must have write access to this repository to perform a release.
 2. Create a tag and push it:
 
    ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
+   export VERSION=v1.0.2
+   git tag --annotate --message="Release ${VERSION}" "${VERSION}"
+   git push origin "${VERSION}"
    ```
 
-3. Once the GitHub Action has completed, you will see a new GitHub Release for
-   that version. Edit the release description if needed.
+3. Go to the [GitHub Action](https://github.com/cert-manager/openshift-routes/actions) and wait
+   for the job to finish.
+4. Once done, open the draft release in the [Releases](https://github.com/cert-manager/openshift-routes/releases)
+   page. Remove the auto-generated changelog and click "Generate Release Notes". Then, edit
+   the changelog so that it reads well for end-users. Once done, click "Publish".
