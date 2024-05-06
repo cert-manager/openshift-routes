@@ -5,6 +5,8 @@ logLevel: 5
 nameOverride: ""
 fullnameOverride: ""
 
+namespace: ""
+
 image:
   # https://github.com/cert-manager/openshift-routes/pkgs/container/cert-manager-openshift-routes
   # the final image is generated as "${registry}/${repostiory}:${tag|digest}"
