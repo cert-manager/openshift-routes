@@ -5,6 +5,11 @@ logLevel: 5
 nameOverride: ""
 fullnameOverride: ""
 
+# This namespace allows you to define where the services are installed into.
+# If not set then they use the namespace of the release.
+# This is helpful when installing cert manager as a chart dependency (sub chart).
+namespace: ""
+
 image:
   # https://github.com/cert-manager/openshift-routes/pkgs/container/cert-manager-openshift-routes
   # the final image is generated as "${registry}/${repostiory}:${tag|digest}"

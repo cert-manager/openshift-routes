@@ -3,6 +3,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "openshift-routes.fullname" . }}
+  namespace: {{ include "openshift-routes.namespace" . }}
   labels:
     {{- include "openshift-routes.labels" . | nindent 4 }}
 spec:
