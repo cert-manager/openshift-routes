@@ -5,6 +5,9 @@ logLevel: 5
 nameOverride: ""
 fullnameOverride: ""
 
+# This namespace allows you to define where the services are installed into.
+# If not set then they use the namespace of the release.
+# This is helpful when installing cert manager as a chart dependency (sub chart).
 namespace: ""
 
 image:
