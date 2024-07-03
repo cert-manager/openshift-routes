@@ -22,8 +22,10 @@ include make/test-unit.mk
 .PHONY: release
 ## Publish all release artifacts (image + helm chart)
 ## @category [shared] Release
-release: $(helm_chart_archive)
+release: $(helm_chart_archive) $(NEEDS_HELM)
 	$(MAKE) oci-push-manager
+
+	$(HELM) push "$(helm_chart_archive)" "oci://ghcr.io/cert-manager/charts"
 
 	@echo "RELEASE_OCI_MANAGER_IMAGE=$(oci_manager_image_name)" >> "$(GITHUB_OUTPUT)"
 	@echo "RELEASE_OCI_MANAGER_TAG=$(oci_manager_image_tag)" >> "$(GITHUB_OUTPUT)"

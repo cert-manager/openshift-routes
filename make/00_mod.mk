@@ -23,7 +23,7 @@ go_manager_main_dir := ./internal/cmd
 go_manager_mod_dir := .
 go_manager_ldflags := -X $(repo_name)/pkg/internal/version.AppVersion=$(VERSION) -X $(repo_name)/pkg/internal/version.GitCommit=$(GITCOMMIT)
 oci_manager_base_image_flavor := static
-oci_manager_image_name := quay.io/jetstack/cert-manager-openshift-routes
+oci_manager_image_name := ghcr.io/cert-manager/cert-manager-openshift-routes
 oci_manager_image_tag := $(VERSION)
 oci_manager_image_name_development := cert-manager.local/cert-manager-openshift-routes
 
@@ -32,7 +32,7 @@ deploy_namespace := cert-manager
 
 helm_chart_source_dir := deploy/charts/openshift-routes
 helm_chart_name := cert-manager-openshift-routes
-helm_chart_version := $(VERSION)
+helm_chart_version := $(VERSION:v%=%)
 helm_labels_template_name := cert-manager-openshift-routes.labels
 helm_docs_use_helm_tool := 1
 helm_generate_schema := 1
