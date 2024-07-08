@@ -107,7 +107,7 @@
       "type": "string"
     },
     "helm-values.image.repository": {
-      "default": "quay.io/jetstack/cert-manager-openshift-routes",
+      "default": "ghcr.io/cert-manager/cert-manager-openshift-routes",
       "description": "Target image repository.",
       "type": "string"
     },
@@ -215,7 +215,7 @@
     },
     "helm-values.resources": {
       "default": {},
-      "description": "Kubernetes pod resources\nref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/\n\nFor example:\nresources:\n  limits:\n    cpu: 100m\n    memory: 128Mi\n  requests:\n    cpu: 100m\n    memory: 128Mi",
+      "description": "Kubernetes pod resources\nref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/\n\nFor example:\nresources:\n  limits:\n    memory: 128Mi\n  requests:\n    cpu: 100m\n    memory: 128Mi",
       "type": "object"
     },
     "helm-values.securityContext": {

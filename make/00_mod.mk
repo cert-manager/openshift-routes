@@ -31,7 +31,7 @@ deploy_name := openshift-routes
 deploy_namespace := cert-manager
 
 helm_chart_source_dir := deploy/charts/openshift-routes
-helm_chart_name := cert-manager-openshift-routes
+helm_chart_name := openshift-routes
 helm_chart_version := $(VERSION:v%=%)
 helm_labels_template_name := cert-manager-openshift-routes.labels
 helm_docs_use_helm_tool := 1

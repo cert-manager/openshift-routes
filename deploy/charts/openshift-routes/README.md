@@ -44,7 +44,7 @@ repository: jetstack/cert-manager-openshift-routes
 #### **image.repository** ~ `string`
 > Default value:
 > ```yaml
-> quay.io/jetstack/cert-manager-openshift-routes
+> ghcr.io/cert-manager/cert-manager-openshift-routes
 > ```
 
 Target image repository.
@@ -142,7 +142,6 @@ For example:
 ```yaml
 resources:
   limits:
-    cpu: 100m
     memory: 128Mi
   requests:
     cpu: 100m

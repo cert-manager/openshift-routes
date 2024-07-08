@@ -30,7 +30,7 @@ image:
   # registry: quay.io
 
   # Target image repository.
-  repository: quay.io/jetstack/cert-manager-openshift-routes
+  repository: ghcr.io/cert-manager/cert-manager-openshift-routes
 
   # Override the image tag to deploy by setting this variable.
   # If no value is set, the chart's appVersion is used.
@@ -93,7 +93,6 @@ securityContext:
 # For example:
 #  resources:
 #    limits:
-#      cpu: 100m
 #      memory: 128Mi
 #    requests:
 #      cpu: 100m

@@ -1,6 +1,6 @@
 apiVersion: v2
 
-name: cert-manager-openshift-routes
+name: openshift-routes
 type: application
 description: A Helm chart to deploy openshift-routes adapter for cert-manager on Kubernetes
 
