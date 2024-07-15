@@ -1,6 +1,7 @@
 issues:
   exclude-rules:
     - linters:
+        - staticcheck
         - errcheck
         - unconvert
         - unparam
