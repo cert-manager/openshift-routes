@@ -1,6 +1,6 @@
 module github.com/cert-manager/openshift-routes
 
-go 1.18
+go 1.22.0
 
 require (
 	github.com/cert-manager/cert-manager v1.15.1
