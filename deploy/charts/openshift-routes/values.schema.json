@@ -1,0 +1,271 @@
+{
+  "$defs": {
+    "helm-values": {
+      "additionalProperties": false,
+      "properties": {
+        "affinity": {
+          "$ref": "#/$defs/helm-values.affinity"
+        },
+        "fullnameOverride": {
+          "$ref": "#/$defs/helm-values.fullnameOverride"
+        },
+        "global": {
+          "$ref": "#/$defs/helm-values.global"
+        },
+        "image": {
+          "$ref": "#/$defs/helm-values.image"
+        },
+        "imagePullSecrets": {
+          "$ref": "#/$defs/helm-values.imagePullSecrets"
+        },
+        "logLevel": {
+          "$ref": "#/$defs/helm-values.logLevel"
+        },
+        "metrics": {
+          "$ref": "#/$defs/helm-values.metrics"
+        },
+        "nameOverride": {
+          "$ref": "#/$defs/helm-values.nameOverride"
+        },
+        "namespace": {
+          "$ref": "#/$defs/helm-values.namespace"
+        },
+        "nodeSelector": {
+          "$ref": "#/$defs/helm-values.nodeSelector"
+        },
+        "podAnnotations": {
+          "$ref": "#/$defs/helm-values.podAnnotations"
+        },
+        "podSecurityContext": {
+          "$ref": "#/$defs/helm-values.podSecurityContext"
+        },
+        "rbac": {
+          "$ref": "#/$defs/helm-values.rbac"
+        },
+        "replicas": {
+          "$ref": "#/$defs/helm-values.replicas"
+        },
+        "resources": {
+          "$ref": "#/$defs/helm-values.resources"
+        },
+        "securityContext": {
+          "$ref": "#/$defs/helm-values.securityContext"
+        },
+        "serviceAccount": {
+          "$ref": "#/$defs/helm-values.serviceAccount"
+        },
+        "tolerations": {
+          "$ref": "#/$defs/helm-values.tolerations"
+        }
+      },
+      "type": "object"
+    },
+    "helm-values.affinity": {
+      "default": {},
+      "description": "A Kubernetes Affinity, if required. For more information, see [Affinity v1 core](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#affinity-v1-core).\n\nFor example:\naffinity:\n  nodeAffinity:\n   requiredDuringSchedulingIgnoredDuringExecution:\n     nodeSelectorTerms:\n     - matchExpressions:\n       - key: foo.bar.com/role\n         operator: In\n         values:\n         - master",
+      "type": "object"
+    },
+    "helm-values.fullnameOverride": {
+      "description": "Override the \"cert-manager.fullname\" value. This value is used as part of most of the names of the resources created by this Helm chart.",
+      "type": "string"
+    },
+    "helm-values.global": {
+      "description": "Global values shared across all (sub)charts"
+    },
+    "helm-values.image": {
+      "additionalProperties": false,
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/helm-values.image.digest"
+        },
+        "pullPolicy": {
+          "$ref": "#/$defs/helm-values.image.pullPolicy"
+        },
+        "registry": {
+          "$ref": "#/$defs/helm-values.image.registry"
+        },
+        "repository": {
+          "$ref": "#/$defs/helm-values.image.repository"
+        },
+        "tag": {
+          "$ref": "#/$defs/helm-values.image.tag"
+        }
+      },
+      "type": "object"
+    },
+    "helm-values.image.digest": {
+      "description": "Target image digest. Override any tag, if set.\nFor example:\ndigest: sha256:0e072dddd1f7f8fc8909a2ca6f65e76c5f0d2fcfb8be47935ae3457e8bbceb20",
+      "type": "string"
+    },
+    "helm-values.image.pullPolicy": {
+      "default": "IfNotPresent",
+      "description": "Kubernetes imagePullPolicy on Deployment.",
+      "type": "string"
+    },
+    "helm-values.image.registry": {
+      "description": "Target image registry. This value is prepended to the target image repository, if set.\nFor example:\nregistry: quay.io\nrepository: jetstack/cert-manager-openshift-routes",
+      "type": "string"
+    },
+    "helm-values.image.repository": {
+      "default": "ghcr.io/cert-manager/cert-manager-openshift-routes",
+      "description": "Target image repository.",
+      "type": "string"
+    },
+    "helm-values.image.tag": {
+      "description": "Override the image tag to deploy by setting this variable. If no value is set, the chart's appVersion is used.",
+      "type": "string"
+    },
+    "helm-values.imagePullSecrets": {
+      "default": [],
+      "description": "Optional secrets used for pulling the openshift-routes container image.",
+      "items": {},
+      "type": "array"
+    },
+    "helm-values.logLevel": {
+      "default": 5,
+      "type": "number"
+    },
+    "helm-values.metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "$ref": "#/$defs/helm-values.metrics.enabled"
+        },
+        "serviceMonitor": {
+          "$ref": "#/$defs/helm-values.metrics.serviceMonitor"
+        }
+      },
+      "type": "object"
+    },
+    "helm-values.metrics.enabled": {
+      "default": false,
+      "description": "when enabled, a service is created that exposes the metrics endpoint",
+      "type": "boolean"
+    },
+    "helm-values.metrics.serviceMonitor": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "$ref": "#/$defs/helm-values.metrics.serviceMonitor.enabled"
+        },
+        "interval": {
+          "$ref": "#/$defs/helm-values.metrics.serviceMonitor.interval"
+        }
+      },
+      "type": "object"
+    },
+    "helm-values.metrics.serviceMonitor.enabled": {
+      "default": false,
+      "description": "Create a ServiceMonitor to add openshift-routes to Prometheus.",
+      "type": "boolean"
+    },
+    "helm-values.metrics.serviceMonitor.interval": {
+      "default": "60s",
+      "description": "The interval to scrape metrics.",
+      "type": "string"
+    },
+    "helm-values.nameOverride": {
+      "description": "Override the \"cert-manager.name\" value, which is used to annotate some of the resources that are created by this Chart (using \"app.kubernetes.io/name\"). NOTE: There are some inconsitencies in the Helm chart when it comes to these annotations (some resources use eg. \"cainjector.name\" which resolves to the value \"cainjector\").",
+      "type": "string"
+    },
+    "helm-values.namespace": {
+      "default": "",
+      "description": "This namespace allows you to define where the services are installed into. If not set then they use the namespace of the release. This is helpful when installing cert manager as a chart dependency (sub chart).",
+      "type": "string"
+    },
+    "helm-values.nodeSelector": {
+      "default": {
+        "kubernetes.io/os": "linux"
+      },
+      "description": "The nodeSelector on Pods tells Kubernetes to schedule Pods on the nodes with matching labels. For more information, see [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).\n\nThis default ensures that Pods are only scheduled to Linux nodes. It prevents Pods being scheduled to Windows nodes in a mixed OS cluster.",
+      "type": "object"
+    },
+    "helm-values.podAnnotations": {
+      "default": {},
+      "description": "Annotations to add to the openshift-routes pod.",
+      "type": "object"
+    },
+    "helm-values.podSecurityContext": {
+      "default": {
+        "runAsNonRoot": true,
+        "seccompProfile": {
+          "type": "RuntimeDefault"
+        }
+      },
+      "description": "Pod Security Context.\nFor more information, see [Configure a Security Context for a Pod or Container](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/).",
+      "type": "object"
+    },
+    "helm-values.rbac": {
+      "additionalProperties": false,
+      "properties": {
+        "create": {
+          "$ref": "#/$defs/helm-values.rbac.create"
+        }
+      },
+      "type": "object"
+    },
+    "helm-values.rbac.create": {
+      "default": true,
+      "description": "create (Cluster-) Roles and RoleBindings for the ServiceAccount",
+      "type": "boolean"
+    },
+    "helm-values.replicas": {
+      "default": 1,
+      "type": "number"
+    },
+    "helm-values.resources": {
+      "default": {},
+      "description": "Kubernetes pod resources\nref: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/\n\nFor example:\nresources:\n  limits:\n    memory: 128Mi\n  requests:\n    cpu: 100m\n    memory: 128Mi",
+      "type": "object"
+    },
+    "helm-values.securityContext": {
+      "default": {
+        "allowPrivilegeEscalation": false,
+        "capabilities": {
+          "drop": [
+            "ALL"
+          ]
+        },
+        "readOnlyRootFilesystem": true
+      },
+      "description": "Container Security Context to be set on the controller component container. For more information, see [Configure a Security Context for a Pod or Container](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/).",
+      "type": "object"
+    },
+    "helm-values.serviceAccount": {
+      "additionalProperties": false,
+      "properties": {
+        "annotations": {
+          "$ref": "#/$defs/helm-values.serviceAccount.annotations"
+        },
+        "create": {
+          "$ref": "#/$defs/helm-values.serviceAccount.create"
+        },
+        "name": {
+          "$ref": "#/$defs/helm-values.serviceAccount.name"
+        }
+      },
+      "type": "object"
+    },
+    "helm-values.serviceAccount.annotations": {
+      "description": "Optional additional annotations to add to the controller's Service Account.",
+      "type": "object"
+    },
+    "helm-values.serviceAccount.create": {
+      "default": true,
+      "description": "Specifies whether a service account should be created",
+      "type": "boolean"
+    },
+    "helm-values.serviceAccount.name": {
+      "description": "The name of the service account to use.\nIf not set and create is true, a name is generated using the fullname template.",
+      "type": "string"
+    },
+    "helm-values.tolerations": {
+      "default": [],
+      "description": "A list of Kubernetes Tolerations, if required. For more information, see [Toleration v1 core](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.27/#toleration-v1-core).\n\nFor example:\ntolerations:\n- key: foo.bar.com/role\n  operator: Equal\n  value: master\n  effect: NoSchedule",
+      "items": {},
+      "type": "array"
+    }
+  },
+  "$ref": "#/$defs/helm-values",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

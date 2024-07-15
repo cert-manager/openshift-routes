@@ -1,0 +1,27 @@
+apiVersion: v2
+
+name: openshift-routes
+type: application
+description: A Helm chart to deploy openshift-routes adapter for cert-manager on Kubernetes
+
+home: https://github.com/cert-manager/openshift-routes
+icon: https://raw.githubusercontent.com/cert-manager/community/4d35a69437d21b76322157e6284be4cd64e6d2b7/logo/logo-small.png
+keywords:
+- cert-manager
+- openshift
+- routes
+annotations:
+  artifacthub.io/alternativeName: openshift-routes
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/category: security
+  artifacthub.io/recommendations: |
+    - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
+maintainers:
+- name: cert-manager-maintainers
+  email: cert-manager-maintainers@googlegroups.com
+  url: https://cert-manager.io
+sources:
+- https://github.com/cert-manager/openshift-routes
+
+appVersion: v0.0.0
+version: v0.0.0
