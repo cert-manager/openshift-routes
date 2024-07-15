@@ -31,6 +31,7 @@ import (
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/cert-manager/openshift-routes/internal/cmd/app/options"
 	"github.com/cert-manager/openshift-routes/internal/controller"
@@ -111,7 +112,9 @@ func Command() *cobra.Command {
 				LeaderElectionReleaseOnCancel: true,
 				ReadinessEndpointName:         opts.ReadyzPath,
 				HealthProbeBindAddress:        fmt.Sprintf("[::]:%d", opts.ReadyzPort),
-				MetricsBindAddress:            fmt.Sprintf("[::]:%d", opts.MetricsPort),
+				Metrics: server.Options{
+					BindAddress: fmt.Sprintf("[::]:%d", opts.MetricsPort),
+				},
 			})
 			if err != nil {
 				return fmt.Errorf("could not create controller manager: %w", err)
