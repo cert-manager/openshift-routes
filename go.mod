@@ -4,19 +4,19 @@ go 1.22.0
 
 require (
 	github.com/cert-manager/cert-manager v1.15.1
-	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/logr v1.4.2
 	github.com/openshift/api v0.0.0-20220511093956-b017c00b66b6
 	github.com/openshift/client-go v0.0.0-20220512130520-80c0822dfe76
-	github.com/spf13/cobra v1.8.0
+	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	k8s.io/api v0.30.2
 	k8s.io/apimachinery v0.30.2
 	k8s.io/cli-runtime v0.30.2
 	k8s.io/client-go v0.30.2
-	k8s.io/component-base v0.30.1
-	k8s.io/klog/v2 v2.120.1
-	sigs.k8s.io/controller-runtime v0.18.2
+	k8s.io/component-base v0.30.2
+	k8s.io/klog/v2 v2.130.1
+	sigs.k8s.io/controller-runtime v0.18.4
 )
 
 require (
