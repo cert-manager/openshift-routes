@@ -216,5 +216,12 @@ Create a ServiceMonitor to add openshift-routes to Prometheus.
 > ```
 
 The interval to scrape metrics.
+#### **omitHelmLabels** ~ `bool`
+> Default value:
+> ```yaml
+> false
+> ```
+
+Omit Helm-specific labels. This is useful when generating a static manifest with `helm template`.
 
 <!-- /AUTO-GENERATED -->
