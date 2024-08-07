@@ -3,7 +3,7 @@ module github.com/cert-manager/openshift-routes
 go 1.22.0
 
 require (
-	github.com/cert-manager/cert-manager v1.15.1
+	github.com/cert-manager/cert-manager v1.15.2
 	github.com/go-logr/logr v1.4.2
 	github.com/openshift/api v0.0.0-20220511093956-b017c00b66b6
 	github.com/openshift/client-go v0.0.0-20220512130520-80c0822dfe76
