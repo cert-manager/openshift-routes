@@ -33,6 +33,9 @@
         "nodeSelector": {
           "$ref": "#/$defs/helm-values.nodeSelector"
         },
+        "omitHelmLabels": {
+          "$ref": "#/$defs/helm-values.omitHelmLabels"
+        },
         "podAnnotations": {
           "$ref": "#/$defs/helm-values.podAnnotations"
         },
@@ -179,6 +182,11 @@
       },
       "description": "The nodeSelector on Pods tells Kubernetes to schedule Pods on the nodes with matching labels. For more information, see [Assigning Pods to Nodes](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/).\n\nThis default ensures that Pods are only scheduled to Linux nodes. It prevents Pods being scheduled to Windows nodes in a mixed OS cluster.",
       "type": "object"
+    },
+    "helm-values.omitHelmLabels": {
+      "default": false,
+      "description": "Omit Helm-specific labels. This is useful when generating a static manifest with `helm template`.",
+      "type": "boolean"
     },
     "helm-values.podAnnotations": {
       "default": {},
