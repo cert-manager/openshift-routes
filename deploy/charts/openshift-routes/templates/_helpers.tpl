@@ -53,6 +53,7 @@ You can generate generate a static manifest free of Helm-specific labels by
 using `--set omitHelmLabels=true`.
 */}}
 {{- include "openshift-routes.selectorLabels" . }}
+app.kubernetes.io/version: {{ .Chart.AppVersion }}
 {{- if not .Values.omitHelmLabels }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 helm.sh/chart: {{ include "openshift-routes.chart" . }}
@@ -65,7 +66,6 @@ Selector labels
 {{- define "openshift-routes.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "openshift-routes.name" . }}
 app.kubernetes.io/component: controller
-app.kubernetes.io/version: {{ .Chart.AppVersion }}
 {{- if not .Values.omitHelmLabels }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end}}
