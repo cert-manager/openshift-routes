@@ -48,10 +48,17 @@ https://github.com/helm/helm/issues/5358.
 Common labels
 */}}
 {{- define "openshift-routes.labels" -}}
-helm.sh/chart: {{ include "openshift-routes.chart" . }}
-{{ include "openshift-routes.selectorLabels" . }}
+{{/*
+You can generate generate a static manifest free of Helm-specific labels by
+using `--set omitHelmLabels=true`.
+*/}}
+{{- include "openshift-routes.selectorLabels" . }}
+app.kubernetes.io/version: {{ .Chart.AppVersion }}
 app.kubernetes.io/component: controller
+{{- if not .Values.omitHelmLabels }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
+helm.sh/chart: {{ include "openshift-routes.chart" . }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -59,7 +66,9 @@ Selector labels
 */}}
 {{- define "openshift-routes.selectorLabels" -}}
 app.kubernetes.io/name: {{ include "openshift-routes.name" . }}
+{{- if not .Values.omitHelmLabels }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end}}
 {{- end }}
 
 {{/*

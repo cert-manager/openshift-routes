@@ -84,7 +84,7 @@ securityContext:
   allowPrivilegeEscalation: false
   capabilities:
     drop:
-    - ALL
+      - ALL
   readOnlyRootFilesystem: true
 
 # Kubernetes pod resources
@@ -143,3 +143,7 @@ metrics:
 
     # The interval to scrape metrics.
     interval: 60s
+
+# Omit Helm-specific labels. This is useful when generating a static manifest
+# with `helm template`.
+omitHelmLabels: false
