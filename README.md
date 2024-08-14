@@ -10,12 +10,17 @@ an Ingress or Gateway resource in vanilla Kubernetes!
 
 ## Prerequisites:
 
-1. Ensure you have [cert-manager](https://github.com/cert-manager/cert-manager) installed
+1. Ensure you have [cert-manager installed](https://cert-manager.io/docs/installation/)
    through the method of your choice. But make sure you install cert-manager and openshift-routes-deployment in the same namespace. By default this is in the namespace **cert-manager**.
-   For example, with the regular manifest:
+   For example, with Helm:
 
 ```sh
-oc apply -f https://github.com/jetstack/cert-manager/releases/download/v1.13.3/cert-manager.yaml
+helm repo add jetstack https://charts.jetstack.io --force-update
+helm install \
+  cert-manager jetstack/cert-manager \
+  --namespace cert-manager \
+  --create-namespace \
+  --set crds.enabled=true
 ```
 
 Both **ClusterIssuer** and namespace based **Issuer** are possible. Here a **ClusterIssuer** is used:
@@ -56,16 +61,16 @@ CNAME:
 
 ## Installation
 
-The openshift-routes component can be installed using the static manifests:
-
-```shell
-oc apply -f https://github.com/cert-manager/openshift-routes/releases/latest/download/cert-manager-openshift-routes.yaml
-```
-
-or with the Helm chart:
+The openshift-routes component can be installed using the Helm chart:
 
 ```shell
 helm install openshift-routes -n cert-manager oci://ghcr.io/cert-manager/charts/openshift-routes
+```
+
+or using templated static manifests:
+
+```shell
+oc apply -f <(helm template openshift-routes -n cert-manager oci://ghcr.io/cert-manager/charts/openshift-routes --set omitHelmLabels=true)
 ```
 
 Please review the [values.yaml](./deploy/chart/values.yaml) file for all configuration options.
@@ -153,23 +158,4 @@ easier for other people to consume in their projects.
 
 # Release Process
 
-You must have write access to this repository to perform a release.
-
-1. ```bash
-   git checkout main
-   git pull origin main
-   ```
-
-2. Create a tag and push it:
-
-   ```bash
-   export VERSION=v1.0.2
-   git tag --annotate --message="Release ${VERSION}" "${VERSION}"
-   git push origin "${VERSION}"
-   ```
-
-3. Go to the [GitHub Action](https://github.com/cert-manager/openshift-routes/actions) and wait
-   for the job to finish.
-4. Once done, open the draft release in the [Releases](https://github.com/cert-manager/openshift-routes/releases)
-   page. Remove the auto-generated changelog and click "Generate Release Notes". Then, edit
-   the changelog so that it reads well for end-users. Once done, click "Publish".
+The release process is documented in [RELEASE.md](RELEASE.md).
