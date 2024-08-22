@@ -333,7 +333,7 @@ func (r *Route) findNextCR(ctx context.Context, route *routev1.Route, revision i
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("multiple certificateRequests found for this route at revision " + strconv.Itoa(revision))
+	return nil, fmt.Errorf("multiple certificateRequests found for this route at revision %d", revision)
 }
 
 // buildNextCR generates the manifest of a Certificate Request that is needed for a given Route and revision
