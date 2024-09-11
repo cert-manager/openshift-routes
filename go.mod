@@ -2,6 +2,15 @@ module github.com/cert-manager/openshift-routes
 
 go 1.22.0
 
+// Do not remove this comment:
+// please place any replace statements here at the top for visibility and add a
+// comment to it as to when it can be removed
+
+// Remove this replace statement when go stops retuning the following error:
+//   module declares its path as: dario.cat/mergo
+//     but was required as: github.com/imdario/mergo
+replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
+
 require (
 	github.com/cert-manager/cert-manager v1.15.3
 	github.com/go-logr/logr v1.4.2
@@ -96,5 +105,3 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
-
-replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
