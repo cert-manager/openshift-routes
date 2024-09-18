@@ -107,7 +107,7 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 		if err != nil {
 			return result, err
 		}
-		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new CertificateRequest for Route %s")
+		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new CertificateRequest")
 		return result, nil
 	}
 	// is the CR Ready and Approved?
