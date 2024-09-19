@@ -54,12 +54,12 @@ func shouldSync(log logr.Logger, route *routev1.Route) bool {
 	}
 
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IssuerNameAnnotationKey) {
-		log.V(5).Info("Route has the annotation %s=%s", cmapi.IssuerNameAnnotationKey, route.Annotations[cmapi.IssuerNameAnnotationKey])
+		log.V(5).Info("Route has the annotation", "annotation-key", cmapi.IssuerNameAnnotationKey, "annotation-value", route.Annotations[cmapi.IssuerNameAnnotationKey])
 		return true
 	}
 
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
-		log.V(5).Info("Route has the annotation %s=%s", cmapi.IngressIssuerNameAnnotationKey, route.Annotations[cmapi.IngressIssuerNameAnnotationKey])
+		log.V(5).Info("Route has the annotation", "annotation-key", cmapi.IngressIssuerNameAnnotationKey, "annotation-value", route.Annotations[cmapi.IngressIssuerNameAnnotationKey])
 		return true
 	}
 
