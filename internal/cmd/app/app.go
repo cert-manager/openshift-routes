@@ -19,7 +19,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"net/http"
+	"os"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"strings"
 	"time"
 
 	cmscheme "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/scheme"
@@ -102,9 +107,29 @@ func Command() *cobra.Command {
 
 			opts.EventRecorder = eventBroadcaster.NewRecorder(combinedScheme, corev1.EventSource{Component: "cert-manager-openshift-routes"})
 
+			watchNamespace, err := getWatchNamespace()
+			if err != nil {
+				return fmt.Errorf("unable to get WATCH_NAMESPACE,the manager will watch and manage resources in all namespaces, err: %w", err)
+			}
+
+			// Add support for MultiNamespace set in WATCH_NAMESPACE (e.g ns1,ns2)
+			cacheConfig := map[string]cache.Config{}
+			if strings.Contains(watchNamespace, ",") {
+				logger.V(3).Info("manager set up with multiple namespaces", "namespaces", watchNamespace)
+				for _, ns := range strings.Split(watchNamespace, ",") {
+					cacheConfig[ns] = cache.Config{
+						LabelSelector: labels.Everything(),
+						FieldSelector: fields.Everything(),
+					}
+				}
+			}
+
 			mgr, err := ctrl.NewManager(opts.RestConfig, ctrl.Options{
-				Scheme:                        combinedScheme,
-				Logger:                        logger,
+				Scheme: combinedScheme,
+				Logger: logger,
+				Cache: cache.Options{
+					DefaultNamespaces: cacheConfig,
+				},
 				LeaderElection:                opts.EnableLeaderElection,
 				LeaderElectionID:              "cert-manager-openshift-routes",
 				LeaderElectionNamespace:       opts.LeaderElectionNamespace,
@@ -137,4 +162,18 @@ func Command() *cobra.Command {
 	}
 	opts.Prepare(cmd)
 	return cmd
+}
+
+// getWatchNamespace returns the Namespace the operator should be watching for changes
+func getWatchNamespace() (string, error) {
+	// WatchNamespaceEnvVar is the constant for env variable WATCH_NAMESPACE
+	// which specifies the Namespace to watch.
+	// An empty value means the operator is running with cluster scope.
+	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
+
+	ns, found := os.LookupEnv(watchNamespaceEnvVar)
+	if !found {
+		return "", fmt.Errorf("%s must be set", watchNamespaceEnvVar)
+	}
+	return ns, nil
 }
