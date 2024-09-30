@@ -65,7 +65,7 @@ metadata:
   name: $route_name
   annotations:
     cert-manager.io/issuer-name: my-ca-issuer
-    cert-manager.io/duration: 1m
+    cert-manager.io/duration: 1h
 spec:
   host: hello-openshift-hello-openshift.test
   port:
@@ -108,13 +108,15 @@ EOF
 kubectl patch route "$route_name" --type=merge --subresource=status -p="$patch"
 
 # Wait for the certificate to be issued
+SLEEP_TIME=2
 
 for _ in {1..10}; do
   certificate=$(kubectl get route "$route_name" -o jsonpath='{.spec.tls.certificate}')
   if [ "$certificate" != "" ]; then
     break
   fi
-  sleep 1
+  echo "Didn't find certificate on route yet, retrying in $SLEEP_TIME seconds"
+  sleep $SLEEP_TIME
 done
 
 if [ "$certificate" == "" ]; then
