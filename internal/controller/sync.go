@@ -85,30 +85,6 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 			// Not a reconcile error, so don't retry this revision
 			return result, nil
 		}
-		// create the secret that will hold the contents of the certificate
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cert.Spec.SecretName,
-				Namespace: route.Namespace,
-				OwnerReferences: []metav1.OwnerReference{
-					*metav1.NewControllerRef(
-						route,
-						routev1.GroupVersion.WithKind("Route"),
-					),
-				},
-			},
-			Type: corev1.SecretTypeTLS,
-			Data: map[string][]byte{
-				// will be filled by cert-manager with the certificate and private key
-				"tls.crt": []byte{},
-				"tls.key": []byte{},
-			},
-		}
-		// TODO: what should we do when the secret already exists? by default, cert-manager does not clean up secrets when a certificate is deleted
-		_, err = r.coreClient.Secrets(route.Namespace).Create(ctx, secret, metav1.CreateOptions{})
-		if err != nil {
-			return result, err
-		}
 
 		// create certificate and return. We own the certificate so it will cause a re-reconcile
 		_, err = r.certClient.CertmanagerV1().Certificates(route.Namespace).Create(ctx, cert, metav1.CreateOptions{})
@@ -119,15 +95,18 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new Certificate")
 		return result, nil
 	}
+
 	// is the certificate ready?
 	ready, cert, err := r.isCertificateReady(ctx, route)
 	if err != nil {
 		return result, err
 	}
+
 	if !ready {
 		log.V(5).Info("Certificate is not ready yet")
 		return result, nil
 	}
+
 	// Cert is ready. Retrieve the associated secret
 	secret, err := r.coreClient.Secrets(route.Namespace).Get(ctx, cert.Spec.SecretName, metav1.GetOptions{})
 	if err != nil {
@@ -143,7 +122,8 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 
 	log.V(5).Info("Populated Route from Cert", "name", route.Name)
 	r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssued, "Route updated with issued certificate")
-	return result, err
+
+	return result, nil
 }
 
 func (r *RouteController) hasValidCertificate(route *routev1.Route) bool {
