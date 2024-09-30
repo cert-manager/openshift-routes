@@ -56,7 +56,20 @@ test-smoke-deps: smoke-setup-routes-crd
 test-smoke-deps: install
 
 .PHONY: test-smoke
-## Smoke end-to-end tests
+## Smoke end-to-end tests using Certificates to issue certs
 ## @category Testing
 test-smoke: test-smoke-deps | kind-cluster
+	./test/test-smoke.sh
+
+test-smoke-cr-deps: INSTALL_OPTIONS :=
+test-smoke-cr-deps: INSTALL_OPTIONS += --set image.repository=$(oci_manager_image_name_development)
+test-smoke-cr-deps: INSTALL_OPTIONS += --set issuanceMode=certificateRequest
+test-smoke-cr-deps: smoke-setup-cert-manager
+test-smoke-cr-deps: smoke-setup-routes-crd
+test-smoke-cr-deps: install
+
+.PHONY: test-smoke-cr
+## Smoke end-to-end tests using CertificateRequests to issue certs
+## @category Testing
+test-smoke-cr: test-smoke-cr-deps | kind-cluster
 	./test/test-smoke.sh

@@ -18,6 +18,9 @@
         "imagePullSecrets": {
           "$ref": "#/$defs/helm-values.imagePullSecrets"
         },
+        "issuanceMode": {
+          "$ref": "#/$defs/helm-values.issuanceMode"
+        },
         "logLevel": {
           "$ref": "#/$defs/helm-values.logLevel"
         },
@@ -123,6 +126,11 @@
       "description": "Optional secrets used for pulling the openshift-routes container image.",
       "items": {},
       "type": "array"
+    },
+    "helm-values.issuanceMode": {
+      "default": "certificate",
+      "description": "Control how certificates are issued for routes. 'certificate' mode (the default) will create a cert-manager Certificate resource and store the issued certificate in a\nKubernetes Secret before adding it to the route.\n'certificaterequest' mode will directly create a CertificateRequest resource, which makes\nthe cert harder to use outside of Routes but avoids creating a Secret",
+      "type": "string"
     },
     "helm-values.logLevel": {
       "default": 5,

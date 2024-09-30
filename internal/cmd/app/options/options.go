@@ -19,6 +19,7 @@ package options
 import (
 	"flag"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
@@ -29,6 +30,13 @@ import (
 	cliflag "k8s.io/component-base/cli/flag"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
+)
+
+const (
+	CertificateIssuanceMode        = "certificate"
+	CertificateRequestIssuanceMode = "certificaterequest"
+
+	defaultIssuanceMode = CertificateIssuanceMode
 )
 
 // Options is the main configuration struct for cert-manager-openshift-routes
@@ -55,6 +63,10 @@ type Options struct {
 	// RestConfig is the Kubernetes config
 	RestConfig *rest.Config
 
+	// IssuanceMode switches between using Certificates and CertificateRequests
+	// to issue certs for routes
+	IssuanceMode string
+
 	logLevel        string
 	kubeConfigFlags *genericclioptions.ConfigFlags
 }
@@ -80,6 +92,19 @@ func (o *Options) Complete() error {
 	o.RestConfig, err = o.kubeConfigFlags.ToRESTConfig()
 	if err != nil {
 		return fmt.Errorf("failed to build kubernetes rest config: %s", err)
+	}
+
+	originalIssuanceMode := o.IssuanceMode
+
+	if o.IssuanceMode == "" {
+		o.IssuanceMode = defaultIssuanceMode
+	}
+
+	o.IssuanceMode = strings.ToLower(o.IssuanceMode)
+	o.IssuanceMode = strings.TrimSuffix(o.IssuanceMode, "s")
+
+	if o.IssuanceMode != CertificateIssuanceMode && o.IssuanceMode != CertificateRequestIssuanceMode {
+		return fmt.Errorf("invalid issuance mode %q; must be either '%s' or '%s'", originalIssuanceMode, CertificateIssuanceMode, CertificateRequestIssuanceMode)
 	}
 
 	return nil
@@ -134,4 +159,7 @@ func (o *Options) addAppFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.LeaderElectionNamespace,
 		"leader-election-namespace", "cert-manager",
 		"Namespace to create leader election resources in.")
+
+	fs.StringVar(&o.IssuanceMode, "issuance-mode", defaultIssuanceMode,
+		fmt.Sprintf("How certificates should be requested. Either '%s' or '%s'", CertificateIssuanceMode, CertificateRequestIssuanceMode))
 }

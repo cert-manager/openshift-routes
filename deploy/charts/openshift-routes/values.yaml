@@ -21,6 +21,13 @@ namespace: ""
 # +docs:property
 # nameOverride: "my-cert-manager"
 
+# Control how certificates are issued for routes. 'certificate' mode (the default) will
+# create a cert-manager Certificate resource and store the issued certificate in a
+# Kubernetes Secret before adding it to the route.
+# 'certificaterequest' mode will directly create a CertificateRequest resource, which makes
+# the cert harder to use outside of Routes but avoids creating a Secret
+issuanceMode: "certificate"
+
 image:
   # Target image registry. This value is prepended to the target image repository, if set.
   # For example:

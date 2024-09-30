@@ -31,6 +31,16 @@ Override the "cert-manager.fullname" value. This value is used as part of most o
 
 Override the "cert-manager.name" value, which is used to annotate some of the resources that are created by this Chart (using "app.kubernetes.io/name"). NOTE: There are some inconsitencies in the Helm chart when it comes to these annotations (some resources use eg. "cainjector.name" which resolves to the value "cainjector").
 
+#### **issuanceMode** ~ `string`
+> Default value:
+> ```yaml
+> certificate
+> ```
+
+Control how certificates are issued for routes. 'certificate' mode (the default) will create a cert-manager Certificate resource and store the issued certificate in a  
+Kubernetes Secret before adding it to the route.  
+'certificaterequest' mode will directly create a CertificateRequest resource, which makes  
+the cert harder to use outside of Routes but avoids creating a Secret
 #### **image.registry** ~ `string`
 
 Target image registry. This value is prepended to the target image repository, if set.  

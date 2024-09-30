@@ -35,6 +35,7 @@ import (
 
 	"github.com/cert-manager/openshift-routes/internal/cmd/app/options"
 	"github.com/cert-manager/openshift-routes/internal/controller"
+	"github.com/cert-manager/openshift-routes/internal/crcontroller"
 )
 
 func Command() *cobra.Command {
@@ -69,22 +70,33 @@ func Command() *cobra.Command {
 				return fmt.Errorf("connected to the Kubernetes API, but the Openshift Route v1 CRD does not appear to be installed")
 			}
 
-			// Check if v1 cert-manager Certificates exist in the API server
+			// Check if v1 cert-manager Certificates / CertificateRequests exist in the API server
 			apiServerHasCertificates := false
+			apiServerHasCertificateRequests := false
+
 			cmResources, err := cl.Discovery().ServerResourcesForGroupVersion("cert-manager.io/v1")
 			if err != nil {
 				return fmt.Errorf("couldn't check if cert-manager.io/v1 exists in the kubernetes API: %w", err)
 			}
 
 			for _, r := range cmResources.APIResources {
+				if apiServerHasCertificates && apiServerHasCertificateRequests {
+					break
+				}
+
 				if r.Kind == "Certificate" {
 					apiServerHasCertificates = true
-					break
+					continue
+				}
+
+				if r.Kind == "CertificateRequest" {
+					apiServerHasCertificateRequests = true
+					continue
 				}
 			}
 
-			if !apiServerHasCertificates {
-				return fmt.Errorf("connected to the Kubernetes API, but the cert-manager v1 CRDs do not appear to be installed")
+			if !apiServerHasCertificates || !apiServerHasCertificateRequests {
+				return fmt.Errorf("connected to the Kubernetes API, but the cert-manager v1 CRDs do not appear to be installed: has Certificates=%v, has CertificateRequests=%v", apiServerHasCertificates, apiServerHasCertificateRequests)
 			}
 
 			logger := opts.Logr.WithName("controller-manager")
@@ -121,6 +133,7 @@ func Command() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("could not create controller manager: %w", err)
 			}
+
 			mgr.AddReadyzCheck("informers_synced", func(req *http.Request) error {
 				// haven't got much time to wait in a readiness check
 				ctx, cancel := context.WithTimeout(req.Context(), 2*time.Second)
@@ -130,13 +143,32 @@ func Command() *cobra.Command {
 				}
 				return fmt.Errorf("informers not synced")
 			})
-			if err := controller.AddToManager(mgr, opts); err != nil {
-				return fmt.Errorf("could not add route controller to manager: %w", err)
+
+			switch opts.IssuanceMode {
+			case options.CertificateIssuanceMode:
+				err := controller.AddToManager(mgr, opts)
+				if err != nil {
+					return fmt.Errorf("could not add certificate-based route controller to manager: %w", err)
+				}
+
+				opts.Logr.V(5).Info("starting certificate-based controller")
+
+			case options.CertificateRequestIssuanceMode:
+				err := crcontroller.AddToManager(mgr, opts)
+				if err != nil {
+					return fmt.Errorf("could not add certificate request-based route controller to manager: %w", err)
+				}
+
+				opts.Logr.V(5).Info("starting certificate request-based controller")
+
+			default:
+				return fmt.Errorf("invalid issuance mode %q", opts.IssuanceMode)
 			}
-			opts.Logr.V(5).Info("starting controller")
+
 			return mgr.Start(ctrl.SetupSignalHandler())
 		},
 	}
+
 	opts.Prepare(cmd)
 	return cmd
 }

@@ -29,6 +29,25 @@ rules:
   verbs:
   - create
   - update
+{{- if eq (lower .Values.issuanceMode) "certificaterequest" }}
+- apiGroups:
+  - cert-manager.io
+  resources:
+  - certificaterequests
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
+    - cert-manager.io
+  resources:
+    - certificaterequests/status
+  verbs:
+    - get
+    - list
+    - watch
+{{- else }}
 - apiGroups:
   - cert-manager.io
   resources:
@@ -55,6 +74,7 @@ rules:
   - get
   - list
   - watch
+{{- end }}
 - apiGroups:
   - ""
   resources:
