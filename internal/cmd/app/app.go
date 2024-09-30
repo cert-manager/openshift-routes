@@ -69,19 +69,21 @@ func Command() *cobra.Command {
 				return fmt.Errorf("connected to the Kubernetes API, but the Openshift Route v1 CRD does not appear to be installed")
 			}
 
-			// Check if v1 cert-manager CertificateRequests exist in the API server
-			apiServerHasCertificateRequests := false
+			// Check if v1 cert-manager Certificates exist in the API server
+			apiServerHasCertificates := false
 			cmResources, err := cl.Discovery().ServerResourcesForGroupVersion("cert-manager.io/v1")
 			if err != nil {
 				return fmt.Errorf("couldn't check if cert-manager.io/v1 exists in the kubernetes API: %w", err)
 			}
+
 			for _, r := range cmResources.APIResources {
-				if r.Kind == "CertificateRequest" {
-					apiServerHasCertificateRequests = true
+				if r.Kind == "Certificate" {
+					apiServerHasCertificates = true
 					break
 				}
 			}
-			if !apiServerHasCertificateRequests {
+
+			if !apiServerHasCertificates {
 				return fmt.Errorf("connected to the Kubernetes API, but the cert-manager v1 CRDs do not appear to be installed")
 			}
 
