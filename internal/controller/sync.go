@@ -248,15 +248,20 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 	}
 
 	var privateKeyAlgorithm cmapi.PrivateKeyAlgorithm
-	privateKeyAlgorithmStr, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
-	switch privateKeyAlgorithmStr {
-	case "RSA":
+	privateKeyAlgorithmStrRaw, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
+	if !found {
+		privateKeyAlgorithmStrRaw = "RSA"
+	}
+
+	switch strings.ToLower(privateKeyAlgorithmStrRaw) {
+	case "rsa":
 		privateKeyAlgorithm = cmapi.RSAKeyAlgorithm
-	case "ECDSA":
+	case "ecdsa":
 		privateKeyAlgorithm = cmapi.ECDSAKeyAlgorithm
-	case "Ed25519":
+	case "ed25519":
 		privateKeyAlgorithm = cmapi.Ed25519KeyAlgorithm
 	default:
+		r.log.Info("unknown private key algorithm, defaulting to RSA", "algorithm", privateKeyAlgorithmStrRaw)
 		privateKeyAlgorithm = cmapi.RSAKeyAlgorithm
 	}
 
