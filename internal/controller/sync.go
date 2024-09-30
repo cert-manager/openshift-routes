@@ -20,6 +20,8 @@ import (
 	"context"
 	"crypto"
 	"fmt"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -76,37 +78,14 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 	}
 	if cert == nil {
 		// generate manifest for new certificate
-		log.V(5).Info("Route has no matching certificate", req.NamespacedName)
+		log.V(5).Info("Route has no matching certificate", "namespace", req.NamespacedName.Namespace, "name", req.NamespacedName.Name)
+
 		var cert *cmapi.Certificate
 		cert, err = r.buildNextCert(ctx, route)
 		if err != nil {
 			log.V(1).Error(err, "error generating certificate", "object", req.NamespacedName)
 			// Not a reconcile error, so don't retry this revision
 			return result, nil
-		}
-		// create the secret that will hold the contents of the certificate
-		secret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      cert.Spec.SecretName,
-				Namespace: route.Namespace,
-				OwnerReferences: []metav1.OwnerReference{
-					*metav1.NewControllerRef(
-						route,
-						routev1.GroupVersion.WithKind("Route"),
-					),
-				},
-			},
-			Type: corev1.SecretTypeTLS,
-			Data: map[string][]byte{
-				// will be filled by cert-manager with the certificate and private key
-				"tls.crt": []byte{},
-				"tls.key": []byte{},
-			},
-		}
-		// TODO: what should we do when the secret already exists? by default, cert-manager does not clean up secrets when a certificate is deleted
-		_, err = r.coreClient.Secrets(route.Namespace).Create(ctx, secret, metav1.CreateOptions{})
-		if err != nil {
-			return result, err
 		}
 
 		// create certificate and return. We own the certificate so it will cause a re-reconcile
@@ -118,15 +97,18 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new Certificate")
 		return result, nil
 	}
+
 	// is the certificate ready?
 	ready, cert, err := r.isCertificateReady(ctx, route)
 	if err != nil {
 		return result, err
 	}
+
 	if !ready {
 		log.V(5).Info("Certificate is not ready yet")
 		return result, nil
 	}
+
 	// Cert is ready. Retrieve the associated secret
 	secret, err := r.coreClient.Secrets(route.Namespace).Get(ctx, cert.Spec.SecretName, metav1.GetOptions{})
 	if err != nil {
@@ -139,9 +121,11 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 		log.V(1).Error(err, "Failed to populate Route from Certificate")
 		return result, err
 	}
-	log.V(5).Info("Populated Route from Cert", route.Name)
+
+	log.V(5).Info("Populated Route from Cert", "name", route.Name)
 	r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssued, "Route updated with issued certificate")
-	return result, err
+
+	return result, nil
 }
 
 func (r *RouteController) hasValidCertificate(route *routev1.Route) bool {
@@ -255,6 +239,17 @@ func (r *RouteController) getCertificateForRoute(ctx context.Context, route *rou
 
 // buildNextCert generates the manifest of a Certificate that is needed for a given Route (based on the annotations)
 func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Route) (*cmapi.Certificate, error) {
+	var issuerName string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
+		issuerName = route.Annotations[cmapi.IngressIssuerNameAnnotationKey]
+	} else {
+		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
+	}
+
+	if issuerName == "" {
+		return nil, fmt.Errorf("missing issuer-name annotation on %s/%s", route.Namespace, route.Name)
+	}
+
 	// Extract various pieces of information from the Route annotations
 	duration, err := certDurationFromRoute(route)
 	if err != nil {
@@ -262,19 +257,35 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			"object", route.Namespace+"/"+route.Name, cmapi.DurationAnnotationKey,
 			route.Annotations[cmapi.DurationAnnotationKey])
 		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidKey, "annotation "+cmapi.DurationAnnotationKey+": "+route.Annotations[cmapi.DurationAnnotationKey]+" is not a valid duration")
-		return nil, fmt.Errorf("Invalid duration annotation on Route %s/%s", route.Namespace, route.Name)
+		return nil, fmt.Errorf("invalid duration annotation on Route %s/%s", route.Namespace, route.Name)
+	}
+
+	var renewBefore time.Duration
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RenewBeforeAnnotationKey) {
+		renewBeforeAnnotation := route.Annotations[cmapi.RenewBeforeAnnotationKey]
+
+		var err error
+		renewBefore, err = time.ParseDuration(renewBeforeAnnotation)
+		if err != nil {
+			return nil, fmt.Errorf("invalid renew-before annotation %q on Route %s/%s", renewBeforeAnnotation, route.Namespace, route.Name)
+		}
 	}
 
 	var privateKeyAlgorithm cmapi.PrivateKeyAlgorithm
-	privateKeyAlgorithmStr, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
-	switch privateKeyAlgorithmStr {
-	case "RSA":
+	privateKeyAlgorithmStrRaw, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
+	if !found {
+		privateKeyAlgorithmStrRaw = "RSA"
+	}
+
+	switch strings.ToLower(privateKeyAlgorithmStrRaw) {
+	case "rsa":
 		privateKeyAlgorithm = cmapi.RSAKeyAlgorithm
-	case "ECDSA":
+	case "ecdsa":
 		privateKeyAlgorithm = cmapi.ECDSAKeyAlgorithm
-	case "Ed25519":
+	case "ed25519":
 		privateKeyAlgorithm = cmapi.Ed25519KeyAlgorithm
 	default:
+		r.log.V(1).Info("unknown private key algorithm, defaulting to RSA", "algorithm", privateKeyAlgorithmStrRaw)
 		privateKeyAlgorithm = cmapi.RSAKeyAlgorithm
 	}
 
@@ -284,8 +295,17 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 		privateKeySize, err = strconv.Atoi(privateKeySizeStr)
 		if err != nil {
 			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeySize, "invalid private key size:"+privateKeySizeStr)
-			return nil, fmt.Errorf("invalid private key size, %s: %v", privateKeySizeStr, err)
+			return nil, fmt.Errorf("invalid private key size annotation %q on %s/%s", privateKeySizeStr, route.Namespace, route.Name)
 		}
+	}
+
+	var privateKeyRotationPolicy cmapi.PrivateKeyRotationPolicy
+
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.PrivateKeyRotationPolicyAnnotationKey) {
+		// Don't validate the policy here because that would mean we'd need to update this codebase
+		// if cert-manager adds new values. Just rely on cert-manager validation when the cert is
+		// created. This is brittle; ideally, cert-manager should expose a function for this.
+		privateKeyRotationPolicy = cmapi.PrivateKeyRotationPolicy(route.Annotations[cmapi.PrivateKeyRotationPolicyAnnotationKey])
 	}
 
 	var dnsNames []string
@@ -302,32 +322,43 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 		altNames := strings.Split(route.Annotations[cmapi.AltNamesAnnotationKey], ",")
 		dnsNames = append(dnsNames, altNames...)
 	}
-	// var ipSans []net.IP
-	// if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
-	// 	ipAddresses := strings.Split(route.Annotations[cmapi.IPSANAnnotationKey], ",")
-	// 	for _, i := range ipAddresses {
-	// 		ip := net.ParseIP(i)
-	// 		if ip != nil {
-	// 			ipSans = append(ipSans, ip)
-	// 		}
-	// 	}
-	// }
-	// var uriSans []*url.URL
-	// if metav1.HasAnnotation(route.ObjectMeta, cmapi.URISANAnnotationKey) {
-	// 	urls := strings.Split(route.Annotations[cmapi.URISANAnnotationKey], ",")
-	// 	for _, u := range urls {
-	// 		ur, err := url.Parse(u)
-	// 		if err != nil {
-	// 			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "Ignoring malformed URI SAN "+u)
-	// 			continue
-	// 		}
-	// 		uriSans = append(uriSans, ur)
-	// 	}
-	// }
+
+	var ipSANs []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
+		ipAddresses := strings.Split(route.Annotations[cmapi.IPSANAnnotationKey], ",")
+		for _, i := range ipAddresses {
+			ip := net.ParseIP(i)
+			if ip == nil {
+				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring unparseable IP SAN %q", i))
+				r.log.V(1).Error(nil, "ignoring unparseble IP address on route", "rawIP", i)
+				continue
+			}
+
+			ipSANs = append(ipSANs, ip.String())
+		}
+	}
+
+	var uriSANs []string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.URISANAnnotationKey) {
+		urls := strings.Split(route.Annotations[cmapi.URISANAnnotationKey], ",")
+
+		for _, u := range urls {
+			ur, err := url.Parse(u)
+			if err != nil {
+				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring malformed URI SAN %q", u))
+				r.log.V(1).Error(err, "ignoring unparseble URI SAN on route", "uri", u)
+				continue
+			}
+
+			uriSANs = append(uriSANs, ur.String())
+		}
+	}
+
 	var emailAddresses []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.EmailsAnnotationKey) {
 		emailAddresses = strings.Split(route.Annotations[cmapi.EmailsAnnotationKey], ",")
 	}
+
 	var organizations []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectOrganizationsAnnotationKey) {
 		subjectOrganizations, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectOrganizationsAnnotationKey])
@@ -341,6 +372,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			return nil, err
 		}
 	}
+
 	var organizationalUnits []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectOrganizationalUnitsAnnotationKey) {
 		subjectOrganizationalUnits, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectOrganizationalUnitsAnnotationKey])
@@ -355,6 +387,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 		}
 
 	}
+
 	var countries []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectCountriesAnnotationKey) {
 		subjectCountries, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectCountriesAnnotationKey])
@@ -368,6 +401,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			return nil, err
 		}
 	}
+
 	var provinces []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectProvincesAnnotationKey) {
 		subjectProvinces, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectProvincesAnnotationKey])
@@ -381,6 +415,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			return nil, err
 		}
 	}
+
 	var localities []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectLocalitiesAnnotationKey) {
 		subjectLocalities, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectLocalitiesAnnotationKey])
@@ -394,6 +429,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			return nil, err
 		}
 	}
+
 	var postalCodes []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectPostalCodesAnnotationKey) {
 		subjectPostalCodes, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectPostalCodesAnnotationKey])
@@ -407,6 +443,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			return nil, err
 		}
 	}
+
 	var streetAddresses []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectStreetAddressesAnnotationKey) {
 		subjectStreetAddresses, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectStreetAddressesAnnotationKey])
@@ -420,25 +457,33 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			return nil, err
 		}
 	}
+
 	var serialNumber string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectSerialNumberAnnotationKey) {
 		serialNumber = route.Annotations[cmapi.SubjectSerialNumberAnnotationKey]
 	}
-	var issuerName string
-	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
-		issuerName = route.Annotations[cmapi.IngressIssuerNameAnnotationKey]
-	} else {
-		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
+
+	var revisionHistoryLimit *int32
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RevisionHistoryLimitAnnotationKey) {
+		historyLimitRaw := route.Annotations[cmapi.RevisionHistoryLimitAnnotationKey]
+
+		parsedLimit, err := strconv.ParseInt(historyLimitRaw, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid revision-history-limit annotation %q on %s/%s", historyLimitRaw, route.Namespace, route.Name)
+		}
+
+		typedLimit := int32(parsedLimit)
+		revisionHistoryLimit = &typedLimit
 	}
 
-	secretName := route.Name + "-tls-cert"
+	secretName := safeKubernetesNameAppend(route.Name, "tls")
 
 	// Build the Certificate resource with the collected information
 	// https://cert-manager.io/docs/usage/certificate/
 	cert := &cmapi.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: route.Name + "-",
-			Namespace:    route.Namespace,
+			Name:      safeKubernetesNameAppend(route.Name, "cert"),
+			Namespace: route.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(
 					route,
@@ -447,12 +492,11 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			},
 		},
 		Spec: cmapi.CertificateSpec{
-			SecretName:     secretName,
-			Duration:       &metav1.Duration{Duration: duration},
-			EmailAddresses: emailAddresses,
-			// RenewBefore?
-			// RevisionHistoryLimit?
-			CommonName: route.Annotations[cmapi.CommonNameAnnotationKey],
+			SecretName:           secretName,
+			Duration:             &metav1.Duration{Duration: duration},
+			RenewBefore:          &metav1.Duration{Duration: renewBefore},
+			RevisionHistoryLimit: revisionHistoryLimit,
+			CommonName:           route.Annotations[cmapi.CommonNameAnnotationKey],
 			Subject: &cmapi.X509Subject{
 				Countries:           countries,
 				Localities:          localities,
@@ -464,14 +508,14 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 				StreetAddresses:     streetAddresses,
 			},
 			PrivateKey: &cmapi.CertificatePrivateKey{
-				Algorithm: privateKeyAlgorithm,
-				Size:      privateKeySize,
-				// RotationPolicy?
+				Algorithm:      privateKeyAlgorithm,
+				Size:           privateKeySize,
+				RotationPolicy: privateKeyRotationPolicy,
 			},
-			DNSNames: dnsNames,
-			// TODO:
-			// URIs:        uriSans,
-			// IPAddresses: ipSans,
+			EmailAddresses: emailAddresses,
+			DNSNames:       dnsNames,
+			URIs:           uriSANs,
+			IPAddresses:    ipSANs,
 			IssuerRef: cmmeta.ObjectReference{
 				Name:  issuerName,
 				Kind:  route.Annotations[cmapi.IssuerKindAnnotationKey],

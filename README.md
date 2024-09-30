@@ -143,14 +143,6 @@ After modifying the source code, you can execute the tests with:
 go test ./...
 ```
 
-To run the controller locally, export the location of your kubeconfig file:
-
-```sh
-export KUBECONFIG=$HOME/path/to/kubeconfig
-# adjust namespace as necessary
-go run internal/cmd/main.go --namespace cert-manager --enable-leader-election=false
-```
-
 # Why is This a Separate Project?
 
 We do not wish to support non Kubernetes (or kubernetes-sigs) APIs in cert-manager core. This adds

@@ -58,5 +58,5 @@ test-smoke-deps: install
 .PHONY: test-smoke
 ## Smoke end-to-end tests
 ## @category Testing
-test-smoke: test-smoke-deps | kind-cluster
-	./test/test-smoke.sh
+test-smoke: test-smoke-deps | kind-cluster $(NEEDS_YQ)
+	./test/test-smoke.sh $(YQ)
