@@ -76,7 +76,8 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 	}
 	if cert == nil {
 		// generate manifest for new certificate
-		log.V(5).Info("Route has no matching certificate", req.NamespacedName)
+		log.V(5).Info("Route has no matching certificate", "namespace", req.NamespacedName.Namespace, "name", req.NamespacedName.Name)
+
 		var cert *cmapi.Certificate
 		cert, err = r.buildNextCert(ctx, route)
 		if err != nil {
@@ -139,7 +140,8 @@ func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route
 		log.V(1).Error(err, "Failed to populate Route from Certificate")
 		return result, err
 	}
-	log.V(5).Info("Populated Route from Cert", route.Name)
+
+	log.V(5).Info("Populated Route from Cert", "name", route.Name)
 	r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssued, "Route updated with issued certificate")
 	return result, err
 }
