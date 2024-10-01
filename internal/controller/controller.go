@@ -24,7 +24,6 @@ import (
 	"github.com/go-logr/logr"
 	routev1 "github.com/openshift/api/route/v1"
 	routev1client "github.com/openshift/client-go/route/clientset/versioned"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -118,10 +117,10 @@ func AddToManager(mgr manager.Manager, opts *options.Options) error {
 	if err != nil {
 		return err
 	}
+
 	return builder.
 		ControllerManagedBy(mgr).
 		For(&routev1.Route{}).
 		Owns(&cmapi.Certificate{}).
-		Owns(&corev1.Secret{}).
 		Complete(controller)
 }
