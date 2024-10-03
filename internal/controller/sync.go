@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The cert-manager Authors.
+Copyright 2024 The cert-manager Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -19,10 +19,6 @@ package controller
 import (
 	"context"
 	"crypto"
-	"crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
 	"net"
 	"net/url"
@@ -55,7 +51,7 @@ const (
 const DefaultCertificateDuration = time.Hour * 24 * 90 // 90 days
 
 // sync reconciles an Openshift route.
-func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.Route) (reconcile.Result, error) {
+func (r *RouteController) sync(ctx context.Context, req reconcile.Request, route *routev1.Route) (reconcile.Result, error) {
 	var result reconcile.Result
 	var err error
 
@@ -74,63 +70,65 @@ func (r *Route) sync(ctx context.Context, req reconcile.Request, route *routev1.
 		log.V(5).Info("route has valid cert")
 		return result, err
 	}
-	// Do we have a revision? If not set revision to 0
-	revision, err := getCurrentRevision(route)
-	if err != nil {
-		err = r.setRevision(ctx, route, 0)
-		log.V(5).Info("generated revision 0")
-		return result, err
-	}
-	// Do we have a next key?
-	if !r.hasNextPrivateKey(route) {
-		err = r.generateNextPrivateKey(ctx, route)
-		log.V(5).Info("generated next private key for route")
-		return result, err
-	}
-	// Is there a CertificateRequest for the Next revision? If not, make it.
-	hasNext, err := r.hasNextCR(ctx, route, revision)
+
+	// Do we already have a Certificate? If not, make it.
+	cert, err := r.getCertificateForRoute(ctx, route)
 	if err != nil {
 		return result, err
 	}
-	if !hasNext {
-		// generate manifest for new CR
-		log.V(5).Info("route has no matching certificate request", "revision", revision)
-		var cr *cmapi.CertificateRequest
-		cr, err = r.buildNextCR(ctx, route, revision)
+	if cert == nil {
+		// generate manifest for new certificate
+		log.V(5).Info("Route has no matching certificate", "namespace", req.NamespacedName.Namespace, "name", req.NamespacedName.Name)
+
+		var cert *cmapi.Certificate
+		cert, err = r.buildNextCert(ctx, route)
 		if err != nil {
-			log.V(1).Error(err, "error generating certificate request", "object", req.NamespacedName)
+			log.V(1).Error(err, "error generating certificate", "object", req.NamespacedName)
 			// Not a reconcile error, so don't retry this revision
 			return result, nil
 		}
-		// create CR and return. We own the CR so it will cause a re-reconcile
-		_, err = r.certClient.CertmanagerV1().CertificateRequests(route.Namespace).Create(ctx, cr, metav1.CreateOptions{})
+
+		// create certificate and return. We own the certificate so it will cause a re-reconcile
+		_, err = r.certClient.CertmanagerV1().Certificates(route.Namespace).Create(ctx, cert, metav1.CreateOptions{})
 		if err != nil {
 			return result, err
 		}
-		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new CertificateRequest")
+
+		r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Created new Certificate")
 		return result, nil
 	}
-	// is the CR Ready and Approved?
-	ready, cr, err := r.certificateRequestReadyAndApproved(ctx, route, revision)
+
+	// is the certificate ready?
+	ready, cert, err := r.isCertificateReady(ctx, route)
 	if err != nil {
 		return result, err
 	}
+
 	if !ready {
-		log.V(5).Info("cr is not ready yet")
+		log.V(5).Info("Certificate is not ready yet")
 		return result, nil
 	}
-	// Cert is ready. Populate the route.
-	err = r.populateRoute(ctx, route, cr, revision)
+
+	// Cert is ready. Retrieve the associated secret
+	secret, err := r.coreClient.Secrets(route.Namespace).Get(ctx, cert.Spec.SecretName, metav1.GetOptions{})
 	if err != nil {
-		log.V(1).Error(err, "failed to populate route certificate")
 		return result, err
 	}
-	log.V(5).Info("populated route cert")
+
+	// Populate the route.
+	err = r.populateRoute(ctx, route, cert, secret)
+	if err != nil {
+		log.V(1).Error(err, "Failed to populate Route from Certificate")
+		return result, err
+	}
+
+	log.V(5).Info("Populated Route from Cert", "name", route.Name)
 	r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssued, "Route updated with issued certificate")
-	return result, err
+
+	return result, nil
 }
 
-func (r *Route) hasValidCertificate(route *routev1.Route) bool {
+func (r *RouteController) hasValidCertificate(route *routev1.Route) bool {
 	// Valid certificate predicates:
 
 	// TLS config set?
@@ -207,159 +205,88 @@ func (r *Route) hasValidCertificate(route *routev1.Route) bool {
 	return true
 }
 
-func (r *Route) hasNextPrivateKey(route *routev1.Route) bool {
-	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IsNextPrivateKeySecretLabelKey) {
-		// Check if the key is valid
-		_, err := utilpki.DecodePrivateKeyBytes([]byte(route.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
-		if err != nil {
-			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidKey, "Regenerating Next Private Key as the existing key is invalid: "+err.Error())
-			return false
-		}
-		return true
-	}
-	return false
-}
+func (r *RouteController) getCertificateForRoute(ctx context.Context, route *routev1.Route) (*cmapi.Certificate, error) {
+	// Note: this could also implement logic to re-use an existing certificate: route.Annotations[cmapi.CertificateNameKey]
 
-func (r *Route) generateNextPrivateKey(ctx context.Context, route *routev1.Route) error {
-	privateKeyAlgorithm, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
-	if !found {
-		privateKeyAlgorithm = string(cmapi.RSAKeyAlgorithm)
-	}
-
-	var privateKeySize int
-	privateKeySizeStr, found := route.Annotations[cmapi.PrivateKeySizeAnnotationKey]
-	if found {
-		var err error
-		privateKeySize, err = strconv.Atoi(privateKeySizeStr)
-		if err != nil {
-			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeySize, "invalid private key size:"+privateKeySizeStr)
-			return fmt.Errorf("invalid private key size, %s: %v", privateKeySizeStr, err)
-		}
-	} else {
-		switch privateKeyAlgorithm {
-		case string(cmapi.ECDSAKeyAlgorithm):
-			privateKeySize = utilpki.ECCurve256
-		case string(cmapi.RSAKeyAlgorithm):
-			privateKeySize = utilpki.MinRSAKeySize
-		}
-	}
-
-	var privateKey crypto.PrivateKey
-	var err error
-	switch privateKeyAlgorithm {
-	case string(cmapi.ECDSAKeyAlgorithm):
-		privateKey, err = utilpki.GenerateECPrivateKey(privateKeySize)
-		if err != nil {
-			return fmt.Errorf("could not generate ECDSA key: %w", err)
-		}
-	case string(cmapi.RSAKeyAlgorithm):
-		privateKey, err = utilpki.GenerateRSAPrivateKey(privateKeySize)
-		if err != nil {
-			return fmt.Errorf("could not generate RSA Key: %w", err)
-		}
-	default:
-		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeyAlgorithm, "invalid private key algorithm: "+privateKeyAlgorithm)
-		return fmt.Errorf("invalid private key algorithm: %s", privateKeyAlgorithm)
-	}
-	encodedKey, err := utilpki.EncodePrivateKey(privateKey, cmapi.PrivateKeyEncoding(cmapi.PKCS1))
-	if err != nil {
-		return fmt.Errorf("could not encode %s key: %w", privateKeyAlgorithm, err)
-	}
-	route.Annotations[cmapi.IsNextPrivateKeySecretLabelKey] = string(encodedKey)
-	_, err = r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-	r.eventRecorder.Event(route, corev1.EventTypeNormal, ReasonIssuing, "Generated Private Key for route")
-	return nil
-}
-
-func getCurrentRevision(route *routev1.Route) (int, error) {
-	revision, found := route.Annotations[cmapi.CertificateRequestRevisionAnnotationKey]
-	if !found {
-		return 0, fmt.Errorf("no revision found")
-	}
-	return strconv.Atoi(revision)
-}
-
-func (r *Route) setRevision(ctx context.Context, route *routev1.Route, revision int) error {
-	revisionString := strconv.Itoa(revision)
-	route.Annotations[cmapi.CertificateRequestRevisionAnnotationKey] = revisionString
-	_, err := r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *Route) hasNextCR(ctx context.Context, route *routev1.Route, revision int) (bool, error) {
-	cr, err := r.findNextCR(ctx, route, revision)
-	if err != nil {
-		return false, err
-	}
-	if cr != nil {
-		return true, nil
-	}
-	return false, nil
-}
-
-func (r *Route) findNextCR(ctx context.Context, route *routev1.Route, revision int) (*cmapi.CertificateRequest, error) {
-	// Grab all certificateRequests in this namespace
-	allCRs, err := r.certClient.CertmanagerV1().CertificateRequests(route.Namespace).List(ctx, metav1.ListOptions{})
+	// Grab all Certificates in this namespace
+	allCerts, err := r.certClient.CertmanagerV1().Certificates(route.Namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
-	var candidates []*cmapi.CertificateRequest
-	for _, cr := range allCRs.Items {
+
+	var candidates []*cmapi.Certificate
+	for _, cert := range allCerts.Items {
 		// Beware: The cert-manager generated client re-uses the memory behind the slice next time List is called.
 		// You must copy here to avoid a race condition where the CR contents changes underneath you!
-		crCandidate := cr.DeepCopy()
-		for _, owner := range crCandidate.OwnerReferences {
+		certCandidate := cert.DeepCopy()
+		for _, owner := range certCandidate.OwnerReferences {
 			if owner.UID == route.UID {
-				crRevision := crCandidate.Annotations[cmapi.CertificateRequestRevisionAnnotationKey]
-				crRevisionInt, err := strconv.Atoi(crRevision)
-				if err != nil {
-					continue
-				}
-				if crRevisionInt == revision+1 {
-					candidates = append(candidates, crCandidate)
-				}
+				candidates = append(candidates, certCandidate)
 			}
 		}
 	}
+
 	if len(candidates) == 1 {
 		return candidates[0], nil
 	}
+
 	if len(candidates) == 0 {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("multiple certificateRequests found for this route at revision %d", revision)
+
+	return nil, fmt.Errorf("multiple matching Certificates found for Route %s/%s", route.Namespace, route.Name)
 }
 
-// buildNextCR generates the manifest of a Certificate Request that is needed for a given Route and revision
-// This method expects that the private key has already been generated and added as an annotation on the route
-func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision int) (*cmapi.CertificateRequest, error) {
-	var key crypto.Signer
-	// get private key from route
-	k2, err := utilpki.DecodePrivateKeyBytes([]byte(route.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
-	if err != nil {
-		return nil, err
+// buildNextCert generates the manifest of a Certificate that is needed for a given Route (based on the annotations)
+func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Route) (*cmapi.Certificate, error) {
+	var issuerName string
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
+		issuerName = route.Annotations[cmapi.IngressIssuerNameAnnotationKey]
+	} else {
+		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
 	}
-	key = k2
 
-	// get duration from route
+	if issuerName == "" {
+		return nil, fmt.Errorf("missing issuer-name annotation on %s/%s", route.Namespace, route.Name)
+	}
+
+	// Extract various pieces of information from the Route annotations
 	duration, err := certDurationFromRoute(route)
 	if err != nil {
 		r.log.V(1).Error(err, "the duration annotation is invalid",
 			"object", route.Namespace+"/"+route.Name, cmapi.DurationAnnotationKey,
 			route.Annotations[cmapi.DurationAnnotationKey])
 		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidKey, "annotation "+cmapi.DurationAnnotationKey+": "+route.Annotations[cmapi.DurationAnnotationKey]+" is not a valid duration")
-		return nil, fmt.Errorf("Invalid duration annotation on Route %s/%s", route.Namespace, route.Name)
+		return nil, fmt.Errorf("invalid duration annotation on Route %s/%s", route.Namespace, route.Name)
 	}
 
-	privateKeyAlgorithm, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
+	var renewBefore time.Duration
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RenewBeforeAnnotationKey) {
+		renewBeforeAnnotation := route.Annotations[cmapi.RenewBeforeAnnotationKey]
+
+		var err error
+		renewBefore, err = time.ParseDuration(renewBeforeAnnotation)
+		if err != nil {
+			return nil, fmt.Errorf("invalid renew-before annotation %q on Route %s/%s", renewBeforeAnnotation, route.Namespace, route.Name)
+		}
+	}
+
+	var privateKeyAlgorithm cmapi.PrivateKeyAlgorithm
+	privateKeyAlgorithmStrRaw, found := route.Annotations[cmapi.PrivateKeyAlgorithmAnnotationKey]
 	if !found {
-		privateKeyAlgorithm = string(cmapi.RSAKeyAlgorithm)
+		privateKeyAlgorithmStrRaw = "RSA"
+	}
+
+	switch strings.ToLower(privateKeyAlgorithmStrRaw) {
+	case "rsa":
+		privateKeyAlgorithm = cmapi.RSAKeyAlgorithm
+	case "ecdsa":
+		privateKeyAlgorithm = cmapi.ECDSAKeyAlgorithm
+	case "ed25519":
+		privateKeyAlgorithm = cmapi.Ed25519KeyAlgorithm
+	default:
+		r.log.V(1).Info("unknown private key algorithm, defaulting to RSA", "algorithm", privateKeyAlgorithmStrRaw)
+		privateKeyAlgorithm = cmapi.RSAKeyAlgorithm
 	}
 
 	var privateKeySize int
@@ -368,41 +295,17 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		privateKeySize, err = strconv.Atoi(privateKeySizeStr)
 		if err != nil {
 			r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeySize, "invalid private key size:"+privateKeySizeStr)
-			return nil, fmt.Errorf("invalid private key size, %s: %v", privateKeySizeStr, err)
+			return nil, fmt.Errorf("invalid private key size annotation %q on %s/%s", privateKeySizeStr, route.Namespace, route.Name)
 		}
 	}
 
-	var signatureAlgorithm x509.SignatureAlgorithm
-	var publicKeyAlgorithm x509.PublicKeyAlgorithm
-	switch privateKeyAlgorithm {
-	case string(cmapi.ECDSAKeyAlgorithm):
-		switch privateKeySize {
-		case 521:
-			signatureAlgorithm = x509.ECDSAWithSHA512
-		case 384:
-			signatureAlgorithm = x509.ECDSAWithSHA384
-		case 256:
-			signatureAlgorithm = x509.ECDSAWithSHA256
-		default:
-			signatureAlgorithm = x509.ECDSAWithSHA256
-		}
-		publicKeyAlgorithm = x509.ECDSA
-	case string(cmapi.RSAKeyAlgorithm):
-		switch {
-		case privateKeySize >= 4096:
-			signatureAlgorithm = x509.SHA512WithRSA
-		case privateKeySize >= 3072:
-			signatureAlgorithm = x509.SHA384WithRSA
-		case privateKeySize >= 2048:
-			signatureAlgorithm = x509.SHA256WithRSA
-		default:
-			signatureAlgorithm = x509.SHA256WithRSA
-		}
-		publicKeyAlgorithm = x509.RSA
+	var privateKeyRotationPolicy cmapi.PrivateKeyRotationPolicy
 
-	default:
-		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidPrivateKeyAlgorithm, "invalid private key algorithm: "+privateKeyAlgorithm)
-		return nil, fmt.Errorf("invalid private key algorithm, %s", privateKeyAlgorithm)
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.PrivateKeyRotationPolicyAnnotationKey) {
+		// Don't validate the policy here because that would mean we'd need to update this codebase
+		// if cert-manager adds new values. Just rely on cert-manager validation when the cert is
+		// created. This is brittle; ideally, cert-manager should expose a function for this.
+		privateKeyRotationPolicy = cmapi.PrivateKeyRotationPolicy(route.Annotations[cmapi.PrivateKeyRotationPolicyAnnotationKey])
 	}
 
 	var dnsNames []string
@@ -419,32 +322,43 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		altNames := strings.Split(route.Annotations[cmapi.AltNamesAnnotationKey], ",")
 		dnsNames = append(dnsNames, altNames...)
 	}
-	var ipSans []net.IP
+
+	var ipSANs []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
 		ipAddresses := strings.Split(route.Annotations[cmapi.IPSANAnnotationKey], ",")
 		for _, i := range ipAddresses {
 			ip := net.ParseIP(i)
-			if ip != nil {
-				ipSans = append(ipSans, ip)
+			if ip == nil {
+				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring unparseable IP SAN %q", i))
+				r.log.V(1).Error(nil, "ignoring unparseble IP address on route", "rawIP", i)
+				continue
 			}
+
+			ipSANs = append(ipSANs, ip.String())
 		}
 	}
-	var uriSans []*url.URL
+
+	var uriSANs []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.URISANAnnotationKey) {
 		urls := strings.Split(route.Annotations[cmapi.URISANAnnotationKey], ",")
+
 		for _, u := range urls {
 			ur, err := url.Parse(u)
 			if err != nil {
-				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, "Ignoring malformed URI SAN "+u)
+				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring malformed URI SAN %q", u))
+				r.log.V(1).Error(err, "ignoring unparseble URI SAN on route", "uri", u)
 				continue
 			}
-			uriSans = append(uriSans, ur)
+
+			uriSANs = append(uriSANs, ur.String())
 		}
 	}
+
 	var emailAddresses []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.EmailsAnnotationKey) {
 		emailAddresses = strings.Split(route.Annotations[cmapi.EmailsAnnotationKey], ",")
 	}
+
 	var organizations []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectOrganizationsAnnotationKey) {
 		subjectOrganizations, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectOrganizationsAnnotationKey])
@@ -458,6 +372,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			return nil, err
 		}
 	}
+
 	var organizationalUnits []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectOrganizationalUnitsAnnotationKey) {
 		subjectOrganizationalUnits, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectOrganizationalUnitsAnnotationKey])
@@ -472,6 +387,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 		}
 
 	}
+
 	var countries []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectCountriesAnnotationKey) {
 		subjectCountries, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectCountriesAnnotationKey])
@@ -485,6 +401,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			return nil, err
 		}
 	}
+
 	var provinces []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectProvincesAnnotationKey) {
 		subjectProvinces, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectProvincesAnnotationKey])
@@ -498,6 +415,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			return nil, err
 		}
 	}
+
 	var localities []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectLocalitiesAnnotationKey) {
 		subjectLocalities, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectLocalitiesAnnotationKey])
@@ -511,6 +429,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			return nil, err
 		}
 	}
+
 	var postalCodes []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectPostalCodesAnnotationKey) {
 		subjectPostalCodes, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectPostalCodesAnnotationKey])
@@ -524,6 +443,7 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			return nil, err
 		}
 	}
+
 	var streetAddresses []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectStreetAddressesAnnotationKey) {
 		subjectStreetAddresses, err := cmutil.SplitWithEscapeCSV(route.Annotations[cmapi.SubjectStreetAddressesAnnotationKey])
@@ -537,54 +457,33 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 			return nil, err
 		}
 	}
+
 	var serialNumber string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.SubjectSerialNumberAnnotationKey) {
 		serialNumber = route.Annotations[cmapi.SubjectSerialNumberAnnotationKey]
 	}
-	csr, err := x509.CreateCertificateRequest(
-		rand.Reader,
-		&x509.CertificateRequest{
-			Version:            0,
-			SignatureAlgorithm: signatureAlgorithm,
-			PublicKeyAlgorithm: publicKeyAlgorithm,
-			Subject: pkix.Name{
-				CommonName:         route.Annotations[cmapi.CommonNameAnnotationKey],
-				Country:            countries,
-				Locality:           localities,
-				Organization:       organizations,
-				OrganizationalUnit: organizationalUnits,
-				PostalCode:         postalCodes,
-				Province:           provinces,
-				SerialNumber:       serialNumber,
-				StreetAddress:      streetAddresses,
-			},
-			EmailAddresses: emailAddresses,
-			DNSNames:       dnsNames,
-			IPAddresses:    ipSans,
-			URIs:           uriSans,
-		},
-		key,
-	)
-	if err != nil {
-		return nil, err
-	}
-	csrPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE REQUEST",
-		Bytes: csr,
-	})
 
-	var issuerName string
-	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IngressIssuerNameAnnotationKey) {
-		issuerName = route.Annotations[cmapi.IngressIssuerNameAnnotationKey]
-	} else {
-		issuerName = route.Annotations[cmapi.IssuerNameAnnotationKey]
+	var revisionHistoryLimit *int32
+	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RevisionHistoryLimitAnnotationKey) {
+		historyLimitRaw := route.Annotations[cmapi.RevisionHistoryLimitAnnotationKey]
+
+		parsedLimit, err := strconv.ParseInt(historyLimitRaw, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("invalid revision-history-limit annotation %q on %s/%s", historyLimitRaw, route.Namespace, route.Name)
+		}
+
+		typedLimit := int32(parsedLimit)
+		revisionHistoryLimit = &typedLimit
 	}
 
-	cr := &cmapi.CertificateRequest{
+	secretName := safeKubernetesNameAppend(route.Name, "tls")
+
+	// Build the Certificate resource with the collected information
+	// https://cert-manager.io/docs/usage/certificate/
+	cert := &cmapi.Certificate{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: route.Name + "-",
-			Namespace:    route.Namespace,
-			Annotations:  map[string]string{cmapi.CertificateRequestRevisionAnnotationKey: strconv.Itoa(revision + 1)},
+			Name:      safeKubernetesNameAppend(route.Name, "cert"),
+			Namespace: route.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				*metav1.NewControllerRef(
 					route,
@@ -592,65 +491,86 @@ func (r *Route) buildNextCR(ctx context.Context, route *routev1.Route, revision 
 				),
 			},
 		},
-		Spec: cmapi.CertificateRequestSpec{
-			Duration: &metav1.Duration{Duration: duration},
+		Spec: cmapi.CertificateSpec{
+			SecretName:           secretName,
+			Duration:             &metav1.Duration{Duration: duration},
+			RenewBefore:          &metav1.Duration{Duration: renewBefore},
+			RevisionHistoryLimit: revisionHistoryLimit,
+			CommonName:           route.Annotations[cmapi.CommonNameAnnotationKey],
+			Subject: &cmapi.X509Subject{
+				Countries:           countries,
+				Localities:          localities,
+				Organizations:       organizations,
+				OrganizationalUnits: organizationalUnits,
+				PostalCodes:         postalCodes,
+				Provinces:           provinces,
+				SerialNumber:        serialNumber,
+				StreetAddresses:     streetAddresses,
+			},
+			PrivateKey: &cmapi.CertificatePrivateKey{
+				Algorithm:      privateKeyAlgorithm,
+				Size:           privateKeySize,
+				RotationPolicy: privateKeyRotationPolicy,
+			},
+			EmailAddresses: emailAddresses,
+			DNSNames:       dnsNames,
+			URIs:           uriSANs,
+			IPAddresses:    ipSANs,
 			IssuerRef: cmmeta.ObjectReference{
 				Name:  issuerName,
 				Kind:  route.Annotations[cmapi.IssuerKindAnnotationKey],
 				Group: route.Annotations[cmapi.IssuerGroupAnnotationKey],
 			},
-			Request: csrPEM,
-			IsCA:    false,
-			Usages:  []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+			IsCA:   false,
+			Usages: []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
 		},
 	}
 
 	if route.Spec.TLS != nil && route.Spec.TLS.Termination == routev1.TLSTerminationReencrypt {
-		cr.Spec.Usages = append(cr.Spec.Usages, cmapi.UsageClientAuth)
+		cert.Spec.Usages = append(cert.Spec.Usages, cmapi.UsageClientAuth)
 	}
 
-	return cr, nil
+	return cert, nil
 }
 
-func (r *Route) certificateRequestReadyAndApproved(ctx context.Context, route *routev1.Route, revision int) (bool, *cmapi.CertificateRequest, error) {
-	cr, err := r.findNextCR(ctx, route, revision)
+func (r *RouteController) isCertificateReady(ctx context.Context, route *routev1.Route) (bool, *cmapi.Certificate, error) {
+	cert, err := r.getCertificateForRoute(ctx, route)
 	if err != nil {
 		return false, nil, err
 	}
-	if cr == nil {
-		r.log.Info("BUG: no certificateRequests found, this should never happen")
+	if cert == nil {
+		r.log.Info("BUG: no Certificate found, this should never happen")
 		return false, nil, nil
 	}
-	if cmapiutil.CertificateRequestIsApproved(cr) &&
-		cmapiutil.CertificateRequestHasCondition(
-			cr,
-			cmapi.CertificateRequestCondition{
-				Type:   cmapi.CertificateRequestConditionReady,
-				Status: cmmeta.ConditionTrue,
-			},
-		) {
-		return true, cr, nil
+	if cmapiutil.CertificateHasCondition(
+		cert,
+		cmapi.CertificateCondition{
+			Type:   cmapi.CertificateConditionReady,
+			Status: cmmeta.ConditionTrue,
+		},
+	) {
+		return true, cert, nil
 	} else {
 		return false, nil, nil
 	}
 }
 
-func (r *Route) populateRoute(ctx context.Context, route *routev1.Route, cr *cmapi.CertificateRequest, revision int) error {
+func (r *RouteController) populateRoute(ctx context.Context, route *routev1.Route, cert *cmapi.Certificate, secret *corev1.Secret) error {
 	// final Sanity checks
 	var key crypto.Signer
 
-	// get private key from route
-	k, err := utilpki.DecodePrivateKeyBytes([]byte(route.Annotations[cmapi.IsNextPrivateKeySecretLabelKey]))
+	// get private key and signed certificate from Secret
+	k, err := utilpki.DecodePrivateKeyBytes(secret.Data["tls.key"])
 	if err != nil {
 		return err
 	}
 	key = k
 
-	cert, err := utilpki.DecodeX509CertificateBytes(cr.Status.Certificate)
+	certificate, err := utilpki.DecodeX509CertificateBytes(secret.Data["tls.crt"])
 	if err != nil {
 		return err
 	}
-	matches, err := utilpki.PublicKeyMatchesCertificate(key.Public(), cert)
+	matches, err := utilpki.PublicKeyMatchesCertificate(key.Public(), certificate)
 	if err != nil {
 		return err
 	}
@@ -658,7 +578,6 @@ func (r *Route) populateRoute(ctx context.Context, route *routev1.Route, cr *cma
 		return fmt.Errorf("key does not match certificate (route: %s/%s)", route.Namespace, route.Name)
 	}
 
-	route.Annotations[cmapi.CertificateRequestRevisionAnnotationKey] = strconv.Itoa(revision + 1)
 	if route.Spec.TLS == nil {
 		route.Spec.TLS = &routev1.TLSConfig{
 			Termination:                   routev1.TLSTerminationEdge,
@@ -670,14 +589,17 @@ func (r *Route) populateRoute(ctx context.Context, route *routev1.Route, cr *cma
 		return err
 	}
 	route.Spec.TLS.Key = string(encodedKey)
-	delete(route.Annotations, cmapi.IsNextPrivateKeySecretLabelKey)
-	route.Spec.TLS.Certificate = string(cr.Status.Certificate)
+	encodedCert, err := utilpki.EncodeX509(certificate)
+	if err != nil {
+		return err
+	}
+	route.Spec.TLS.Certificate = string(encodedCert)
 
 	_, err = r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
 	return err
 }
 
-func (r *Route) getRequeueAfterDuration(route *routev1.Route) time.Duration {
+func (r *RouteController) getRequeueAfterDuration(route *routev1.Route) time.Duration {
 	cert, err := utilpki.DecodeX509CertificateBytes([]byte(route.Spec.TLS.Certificate))
 	if err != nil {
 		// Not expecting the cert to be invalid by the time we get here

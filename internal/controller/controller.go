@@ -26,6 +26,8 @@ import (
 	routev1client "github.com/openshift/client-go/route/clientset/versioned"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -35,9 +37,10 @@ import (
 	"github.com/cert-manager/openshift-routes/internal/cmd/app/options"
 )
 
-type Route struct {
+type RouteController struct {
 	routeClient   routev1client.Interface
 	certClient    cmclient.Interface
+	coreClient    corev1client.CoreV1Interface
 	eventRecorder record.EventRecorder
 
 	log logr.Logger
@@ -67,7 +70,7 @@ func shouldSync(log logr.Logger, route *routev1.Route) bool {
 	return false
 }
 
-func (r *Route) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+func (r *RouteController) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	log := r.log.WithValues("object", req.NamespacedName)
 	log.V(5).Info("started reconciling")
 	route, err := r.routeClient.RouteV1().Routes(req.Namespace).Get(ctx, req.Name, metav1.GetOptions{})
@@ -86,7 +89,7 @@ func (r *Route) Reconcile(ctx context.Context, req reconcile.Request) (reconcile
 	return r.sync(ctx, req, route.DeepCopy())
 }
 
-func New(base logr.Logger, config *rest.Config, recorder record.EventRecorder) (*Route, error) {
+func New(base logr.Logger, config *rest.Config, recorder record.EventRecorder) (*RouteController, error) {
 	routeClient, err := routev1client.NewForConfig(config)
 	if err != nil {
 		return nil, err
@@ -95,10 +98,15 @@ func New(base logr.Logger, config *rest.Config, recorder record.EventRecorder) (
 	if err != nil {
 		return nil, err
 	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
 
-	return &Route{
+	return &RouteController{
 		routeClient:   routeClient,
 		certClient:    certClient,
+		coreClient:    clientset.CoreV1(),
 		log:           base.WithName("route"),
 		eventRecorder: recorder,
 	}, nil
@@ -109,9 +117,10 @@ func AddToManager(mgr manager.Manager, opts *options.Options) error {
 	if err != nil {
 		return err
 	}
+
 	return builder.
 		ControllerManagedBy(mgr).
 		For(&routev1.Route{}).
-		Owns(&cmapi.CertificateRequest{}).
+		Owns(&cmapi.Certificate{}).
 		Complete(controller)
 }
