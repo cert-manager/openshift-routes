@@ -12,7 +12,7 @@ go 1.22.0
 replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
 
 require (
-	github.com/cert-manager/cert-manager v1.16.0
+	github.com/cert-manager/cert-manager v1.16.1
 	github.com/go-logr/logr v1.4.2
 	github.com/openshift/api v0.0.0-20240909041644-5852b58f4b10
 	github.com/openshift/client-go v0.0.0-20240906181530-b2f7c4ab0984
