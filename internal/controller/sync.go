@@ -260,14 +260,17 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 		return nil, fmt.Errorf("invalid duration annotation on Route %s/%s", route.Namespace, route.Name)
 	}
 
-	var renewBefore time.Duration
+	var renewBefore *metav1.Duration
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.RenewBeforeAnnotationKey) {
 		renewBeforeAnnotation := route.Annotations[cmapi.RenewBeforeAnnotationKey]
 
-		var err error
-		renewBefore, err = time.ParseDuration(renewBeforeAnnotation)
+		parsedRenewBefore, err := time.ParseDuration(renewBeforeAnnotation)
 		if err != nil {
 			return nil, fmt.Errorf("invalid renew-before annotation %q on Route %s/%s", renewBeforeAnnotation, route.Namespace, route.Name)
+		}
+
+		if parsedRenewBefore > 0 {
+			renewBefore = &metav1.Duration{Duration: parsedRenewBefore}
 		}
 	}
 
@@ -494,7 +497,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 		Spec: cmapi.CertificateSpec{
 			SecretName:           secretName,
 			Duration:             &metav1.Duration{Duration: duration},
-			RenewBefore:          &metav1.Duration{Duration: renewBefore},
+			RenewBefore:          renewBefore,
 			RevisionHistoryLimit: revisionHistoryLimit,
 			CommonName:           route.Annotations[cmapi.CommonNameAnnotationKey],
 			Subject: &cmapi.X509Subject{
