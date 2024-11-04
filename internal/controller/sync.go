@@ -560,14 +560,16 @@ func (r *RouteController) populateRoute(ctx context.Context, route *routev1.Rout
 	// final Sanity checks
 	var key crypto.Signer
 
-	// get private key and signed certificate from Secret
+	// get private key, signed certificate and ca chain certficates from Secret
 	k, err := utilpki.DecodePrivateKeyBytes(secret.Data["tls.key"])
 	if err != nil {
 		return err
 	}
 	key = k
 
-	certificate, err := utilpki.DecodeX509CertificateBytes(secret.Data["tls.crt"])
+	certificates, err := utilpki.DecodeX509CertificateSetBytes(secret.Data["tls.crt"])
+
+	certificate := certificates[0]
 	if err != nil {
 		return err
 	}
@@ -595,6 +597,12 @@ func (r *RouteController) populateRoute(ctx context.Context, route *routev1.Rout
 		return err
 	}
 	route.Spec.TLS.Certificate = string(encodedCert)
+
+	encodedCAs, err := utilpki.EncodeX509Chain(certificates[1:])
+	if err != nil {
+		return err
+	}
+	route.Spec.TLS.CACertificate = string(encodedCAs)
 
 	_, err = r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
 	return err
