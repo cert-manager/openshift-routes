@@ -12,20 +12,20 @@ go 1.22.0
 replace github.com/imdario/mergo => github.com/imdario/mergo v0.3.16
 
 require (
-	github.com/cert-manager/cert-manager v1.16.1
+	github.com/cert-manager/cert-manager v1.16.2
 	github.com/go-logr/logr v1.4.2
 	github.com/openshift/api v0.0.0-20240909041644-5852b58f4b10
 	github.com/openshift/client-go v0.0.0-20240906181530-b2f7c4ab0984
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.9.0
-	k8s.io/api v0.31.2
-	k8s.io/apimachinery v0.31.2
-	k8s.io/cli-runtime v0.31.2
-	k8s.io/client-go v0.31.2
-	k8s.io/component-base v0.31.2
+	github.com/stretchr/testify v1.10.0
+	k8s.io/api v0.31.3
+	k8s.io/apimachinery v0.31.3
+	k8s.io/cli-runtime v0.31.3
+	k8s.io/client-go v0.31.3
+	k8s.io/component-base v0.31.3
 	k8s.io/klog/v2 v2.130.1
-	sigs.k8s.io/controller-runtime v0.19.0
+	sigs.k8s.io/controller-runtime v0.19.3
 )
 
 require (
@@ -37,7 +37,6 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
-	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.7 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
