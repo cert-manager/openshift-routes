@@ -31,13 +31,9 @@ deploy_name := openshift-routes
 deploy_namespace := cert-manager
 
 helm_chart_source_dir := deploy/charts/openshift-routes
-helm_chart_name := openshift-routes
-helm_chart_version := $(VERSION:v%=%)
-helm_chart_app_version := $(VERSION)
+helm_chart_image_name := ghcr.io/cert-manager/charts/openshift-routes
+helm_chart_version := $(VERSION)
 helm_labels_template_name := cert-manager-openshift-routes.labels
-helm_docs_use_helm_tool := 1
-helm_generate_schema := 1
-helm_verify_values := 1
 
 golangci_lint_config := .golangci.yaml
 

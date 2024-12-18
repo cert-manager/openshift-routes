@@ -20,7 +20,6 @@ The release process for this repo is documented below:
     - Build and publish any container images
     - Build and publish the Helm chart
     - Create a draft GitHub release
-    - Upload the Helm chart tarball to the GitHub release
 3. Visit the [releases page], edit the draft release, click "Generate release notes", then edit the notes to add the following to the top
     ```
     openshift-routes provides OpenShift Route support for cert-manager
