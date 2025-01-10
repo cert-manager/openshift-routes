@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"crypto"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/url"
@@ -313,7 +314,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 	// Get the canonical hostname(s) of the Route (from .spec.host or .spec.subdomain)
 	dnsNames = getRouteHostnames(route)
 	if len(dnsNames) == 0 {
-		err := fmt.Errorf("Route is not yet initialized with a hostname")
+		err := fmt.Errorf("route is not yet initialized with a hostname")
 		r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonMissingHostname, fmt.Sprint(err))
 		return nil, err
 	}
@@ -331,7 +332,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			ip := net.ParseIP(i)
 			if ip == nil {
 				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring unparseable IP SAN %q", i))
-				r.log.V(1).Error(nil, "ignoring unparseble IP address on route", "rawIP", i)
+				r.log.V(1).Error(nil, "ignoring unparseable IP address on route", "rawIP", i)
 				continue
 			}
 
@@ -347,7 +348,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			ur, err := url.Parse(u)
 			if err != nil {
 				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring malformed URI SAN %q", u))
-				r.log.V(1).Error(err, "ignoring unparseble URI SAN on route", "uri", u)
+				r.log.V(1).Error(err, "ignoring unparseable URI SAN on route", "uri", u)
 				continue
 			}
 
@@ -560,22 +561,34 @@ func (r *RouteController) populateRoute(ctx context.Context, route *routev1.Rout
 	// final Sanity checks
 	var key crypto.Signer
 
-	// get private key and signed certificate from Secret
+	// get private key, signed certificate and ca chain certificates from Secret
 	k, err := utilpki.DecodePrivateKeyBytes(secret.Data["tls.key"])
 	if err != nil {
 		return err
 	}
 	key = k
 
-	certificate, err := utilpki.DecodeX509CertificateBytes(secret.Data["tls.crt"])
+	certificates, err := utilpki.DecodeX509CertificateSetBytes(secret.Data["tls.crt"])
 	if err != nil {
 		return err
 	}
-	matches, err := utilpki.PublicKeyMatchesCertificate(key.Public(), certificate)
-	if err != nil {
-		return err
+
+	var certificate *x509.Certificate
+	var caCertificates []*x509.Certificate
+
+	for _, cert := range certificates {
+		matches, err := utilpki.PublicKeyMatchesCertificate(key.Public(), cert)
+		if err != nil {
+			return err
+		}
+		if matches {
+			certificate = cert
+		} else {
+			caCertificates = append(caCertificates, cert)
+		}
 	}
-	if !matches {
+
+	if certificate == nil {
 		return fmt.Errorf("key does not match certificate (route: %s/%s)", route.Namespace, route.Name)
 	}
 
@@ -596,6 +609,13 @@ func (r *RouteController) populateRoute(ctx context.Context, route *routev1.Rout
 	}
 	route.Spec.TLS.Certificate = string(encodedCert)
 
+	if caCertificates != nil && len(caCertificates) > 0 {
+		encodedCAs, err := utilpki.EncodeX509Chain(caCertificates)
+		if err != nil {
+			return err
+		}
+		route.Spec.TLS.CACertificate = string(encodedCAs)
+	}
 	_, err = r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
 	return err
 }
