@@ -567,11 +567,18 @@ func (r *RouteController) populateRoute(ctx context.Context, route *routev1.Rout
 	}
 	key = k
 
-	certificate, err := utilpki.DecodeX509CertificateBytes(secret.Data["tls.crt"])
+	certificates, err := utilpki.DecodeX509CertificateChainBytes(secret.Data["tls.crt"])
 	if err != nil {
 		return err
 	}
-	matches, err := utilpki.PublicKeyMatchesCertificate(key.Public(), certificate)
+
+	if len(certificates) == 0 {
+		// this shouldn't happen; DecodeX509CertificateChainBytes should error in this situation
+		// but just in case, catch this case so we don't panic when accessing certificates[0]
+		return fmt.Errorf("found no valid certs from DecodeX509CertificateChainBytes")
+	}
+
+	matches, err := utilpki.PublicKeyMatchesCertificate(key.Public(), certificates[0])
 	if err != nil {
 		return err
 	}
@@ -585,16 +592,20 @@ func (r *RouteController) populateRoute(ctx context.Context, route *routev1.Rout
 			InsecureEdgeTerminationPolicy: routev1.InsecureEdgeTerminationPolicyRedirect,
 		}
 	}
+
 	encodedKey, err := utilpki.EncodePrivateKey(key, cmapi.PKCS1)
 	if err != nil {
 		return err
 	}
+
 	route.Spec.TLS.Key = string(encodedKey)
-	encodedCert, err := utilpki.EncodeX509(certificate)
+
+	encodedCerts, err := utilpki.EncodeX509Chain(certificates)
 	if err != nil {
 		return err
 	}
-	route.Spec.TLS.Certificate = string(encodedCert)
+
+	route.Spec.TLS.Certificate = string(encodedCerts)
 
 	_, err = r.routeClient.RouteV1().Routes(route.Namespace).Update(ctx, route, metav1.UpdateOptions{})
 	return err

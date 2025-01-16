@@ -20,7 +20,8 @@ set -o pipefail
 
 YQ=${1:-yq}
 
-# Create a self-signed CA certificate and Issuer
+# Create a self-signed root CA certificate and Issuer
+# Then create an intermediate CA and issuer
 
 cat <<EOF | kubectl apply -f -
 ---
@@ -50,10 +51,34 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Issuer
 metadata:
-  name: my-ca-issuer
+  name: my-root-issuer
 spec:
   ca:
     secretName: root-secret
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: my-intermediate-ca
+spec:
+  isCA: true
+  commonName: my-intermediate-ca
+  secretName: intermediate-secret
+  privateKey:
+    algorithm: RSA
+    size: 2048
+  issuerRef:
+    name: my-root-issuer
+    kind: Issuer
+    group: cert-manager.io
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: my-ca-issuer
+spec:
+  ca:
+    secretName: intermediate-secret
 EOF
 
 # Create a Route and patch the status with multiple hosts
@@ -126,7 +151,7 @@ kubectl patch route "$route_name" --type=merge --subresource=status -p="$patch"
 # Wait for the certificate to be issued
 SLEEP_TIME=2
 
-for _ in {1..10}; do
+for _ in {1..30}; do
   certificate=$(kubectl get route "$route_name" -o jsonpath='{.spec.tls.certificate}')
   if [ "$certificate" != "" ]; then
     break
