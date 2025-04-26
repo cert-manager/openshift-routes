@@ -1,7 +1,6 @@
 module github.com/cert-manager/openshift-routes
 
-go 1.23.0
-toolchain go1.24.1
+go 1.24.0
 
 // Do not remove this comment:
 // please place any replace statements here at the top for visibility and add a
