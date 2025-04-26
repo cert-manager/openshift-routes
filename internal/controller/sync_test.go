@@ -17,7 +17,6 @@ limitations under the License.
 package controller
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -1645,7 +1644,7 @@ func TestRoute_buildNextCertificate(t *testing.T) {
 			}
 
 			// test "buildNextCR" function
-			cert, err := r.buildNextCert(context.TODO(), tt.route)
+			cert, err := r.buildNextCert(t.Context(), tt.route)
 
 			// check that we got the expected error (including nil)
 			assert.Equal(t, tt.wantErr, err, "buildNextCert()")
