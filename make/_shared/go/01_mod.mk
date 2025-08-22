@@ -16,6 +16,14 @@ ifndef bin_dir
 $(error bin_dir is not set)
 endif
 
+ifndef repo_name
+$(error repo_name is not set)
+endif
+
+ifndef golangci_lint_config
+$(error golangci_lint_config is not set)
+endif
+
 golangci_lint_override := $(dir $(lastword $(MAKEFILE_LIST)))/.golangci.override.yaml
 
 .PHONY: go-workspace
@@ -101,7 +109,6 @@ verify-govulncheck: | $(NEEDS_GOVULNCHECK)
 
 endif # govulncheck_skip
 
-ifdef golangci_lint_config
 
 .PHONY: generate-golangci-lint-config
 ## Generate a golangci-lint configuration file
@@ -115,6 +122,7 @@ generate-golangci-lint-config: | $(NEEDS_GOLANGCI-LINT) $(NEEDS_YQ) $(bin_dir)/s
 	cp $(golangci_lint_config) $(bin_dir)/scratch/golangci-lint.yaml.tmp
 	$(YQ) -i 'del(.linters.enable)' $(bin_dir)/scratch/golangci-lint.yaml.tmp
 	$(YQ) eval-all -i '. as $$item ireduce ({}; . * $$item)' $(bin_dir)/scratch/golangci-lint.yaml.tmp $(golangci_lint_override)
+	$(YQ) -i '(.. | select(tag == "!!str")) |= sub("{{REPO-NAME}}", "$(repo_name)")' $(bin_dir)/scratch/golangci-lint.yaml.tmp
 	mv $(bin_dir)/scratch/golangci-lint.yaml.tmp $(golangci_lint_config)
 
 shared_generate_targets += generate-golangci-lint-config
@@ -150,5 +158,3 @@ fix-golangci-lint: | $(NEEDS_GOLANGCI-LINT) $(NEEDS_YQ) $(NEEDS_GCI) $(bin_dir)/
 				popd >/dev/null; \
 				echo ""; \
 			done
-
-endif
