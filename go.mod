@@ -13,7 +13,7 @@ require (
 	github.com/openshift/client-go v0.0.0-20240906181530-b2f7c4ab0984
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.7
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.0
 	k8s.io/api v0.33.4
 	k8s.io/apimachinery v0.33.4
 	k8s.io/cli-runtime v0.33.4
