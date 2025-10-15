@@ -205,7 +205,7 @@ SOME GARBAGE
 			},
 				true),
 			want:         false,
-			wantedEvents: []string{"Normal Issuing Issuing cert as the existing key is invalid: error decoding private key PEM block"},
+			wantedEvents: []string{"Normal Issuing Issuing cert as the existing key is invalid: error decoding private key PEM block: no PEM data was found in given input"},
 		},
 		{
 			name: "missing private key triggers a renewal",
@@ -260,7 +260,7 @@ SOME GARBAGE
 			},
 				true),
 			want:         false,
-			wantedEvents: []string{"Normal Issuing Issuing cert as the existing cert is invalid: error decoding certificate PEM block"},
+			wantedEvents: []string{"Normal Issuing Issuing cert as the existing cert is invalid: error decoding certificate PEM block: no valid certificates found"},
 		},
 		{
 			name: "missing cert triggers a renewal",
