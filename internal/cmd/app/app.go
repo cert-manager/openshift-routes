@@ -89,7 +89,7 @@ func Command() *cobra.Command {
 
 			logger := opts.Logr.WithName("controller-manager")
 			eventBroadcaster := record.NewBroadcaster()
-			eventBroadcaster.StartLogging(func(format string, args ...interface{}) {
+			eventBroadcaster.StartLogging(func(format string, args ...any) {
 				logger.V(3).Info(fmt.Sprintf(format, args...))
 			})
 			eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: cl.CoreV1().Events("")})

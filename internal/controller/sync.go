@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -326,8 +327,8 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 
 	var ipSANs []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.IPSANAnnotationKey) {
-		ipAddresses := strings.Split(route.Annotations[cmapi.IPSANAnnotationKey], ",")
-		for _, i := range ipAddresses {
+		ipAddresses := strings.SplitSeq(route.Annotations[cmapi.IPSANAnnotationKey], ",")
+		for i := range ipAddresses {
 			ip := net.ParseIP(i)
 			if ip == nil {
 				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring unparseable IP SAN %q", i))
@@ -341,9 +342,9 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 
 	var uriSANs []string
 	if metav1.HasAnnotation(route.ObjectMeta, cmapi.URISANAnnotationKey) {
-		urls := strings.Split(route.Annotations[cmapi.URISANAnnotationKey], ",")
+		urls := strings.SplitSeq(route.Annotations[cmapi.URISANAnnotationKey], ",")
 
-		for _, u := range urls {
+		for u := range urls {
 			ur, err := url.Parse(u)
 			if err != nil {
 				r.eventRecorder.Event(route, corev1.EventTypeWarning, ReasonInvalidValue, fmt.Sprintf("Ignoring malformed URI SAN %q", u))
@@ -665,7 +666,7 @@ func getRouteHostnames(r *routev1.Route) []string {
 			if ing.Conditions[i].Type == "Admitted" && ing.Conditions[i].Status == "True" {
 				// The same hostname can be exposed by multiple Ingress routers,
 				// but we only want a list of unique hostnames.
-				if !stringInSlice(hostnames, ing.Host) {
+				if !slices.Contains(hostnames, ing.Host) {
 					hostnames = append(hostnames, ing.Host)
 				}
 			}
@@ -673,13 +674,4 @@ func getRouteHostnames(r *routev1.Route) []string {
 	}
 
 	return hostnames
-}
-
-func stringInSlice(slice []string, s string) bool {
-	for i := range slice {
-		if slice[i] == s {
-			return true
-		}
-	}
-	return false
 }
