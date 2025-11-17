@@ -23,5 +23,5 @@ maintainers:
 sources:
 - https://github.com/cert-manager/openshift-routes
 
-appVersion: v0.0.0
-version: v0.0.0
+appVersion: v0.8.3
+version: 1.0.0
