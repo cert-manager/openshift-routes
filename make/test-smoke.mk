@@ -15,12 +15,12 @@
 .PHONY: smoke-setup-cert-manager
 smoke-setup-cert-manager: | kind-cluster $(NEEDS_HELM) $(NEEDS_KUBECTL)
 	$(HELM) upgrade \
+		cert-manager oci://quay.io/jetstack/charts/cert-manager \
 		--install \
 		--create-namespace \
 		--wait \
 		--version $(cert_manager_version) \
 		--namespace cert-manager \
-		--repo https://charts.jetstack.io \
 		--set crds.enabled=true \
 		--set image.repository=$(quay.io/jetstack/cert-manager-controller.REPO) \
 		--set image.tag=$(quay.io/jetstack/cert-manager-controller.TAG) \
@@ -34,7 +34,7 @@ smoke-setup-cert-manager: | kind-cluster $(NEEDS_HELM) $(NEEDS_KUBECTL)
 		--set startupapicheck.image.repository=$(quay.io/jetstack/cert-manager-startupapicheck.REPO) \
 		--set startupapicheck.image.tag=$(quay.io/jetstack/cert-manager-startupapicheck.TAG) \
 		--set startupapicheck.image.pullPolicy=Never \
-		cert-manager cert-manager >/dev/null
+		>/dev/null
 
 openshift_branch := release-4.18
 .PHONY: smoke-setup-routes-crd
