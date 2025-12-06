@@ -9,7 +9,7 @@ go 1.25.0
 require (
 	github.com/cert-manager/cert-manager v1.19.1
 	github.com/go-logr/logr v1.4.3
-	github.com/openshift/api v0.0.0-20251016080153-44baf885fd37
+	github.com/openshift/api v0.0.0-20251205114208-5eb46a7b4ce8
 	github.com/openshift/client-go v0.0.0-20251015124057-db0dee36e235
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/pflag v1.0.10
