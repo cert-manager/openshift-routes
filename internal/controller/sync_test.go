@@ -1026,7 +1026,102 @@ func TestRoute_buildNextCertificate(t *testing.T) {
 			},
 			wantErr: nil,
 		},
+		{
+			name: "With PKCS8 private key encoding annotation",
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      routeName,
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:         "self-signed-issuer",
+						cmapi.PrivateKeyEncodingAnnotationKey: string(cmapi.PKCS8),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: domain,
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: domain,
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certName,
+					Namespace: "some-namespace",
+				},
+				Spec: cmapi.CertificateSpec{
+					Usages:     []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration:   &metav1.Duration{Duration: DefaultCertificateDuration},
+					IsCA:       false,
+					DNSNames:   domainSlice,
+					SecretName: secretName,
 
+					PrivateKey: &cmapi.CertificatePrivateKey{
+						Encoding: cmapi.PKCS8,
+					},
+				},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "With PKCS1 private key encoding annotation",
+			route: generateRouteStatus(&routev1.Route{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      routeName,
+					Namespace: "some-namespace",
+					Annotations: map[string]string{
+						cmapi.IssuerNameAnnotationKey:         "self-signed-issuer",
+						cmapi.PrivateKeyEncodingAnnotationKey: string(cmapi.PKCS1),
+					},
+				},
+				Spec: routev1.RouteSpec{
+					Host: domain,
+				},
+				Status: routev1.RouteStatus{
+					Ingress: []routev1.RouteIngress{
+						{
+							Host: domain,
+							Conditions: []routev1.RouteIngressCondition{
+								{
+									Type:   "Admitted",
+									Status: "True",
+								},
+							},
+						},
+					},
+				},
+			},
+				true),
+			want: &cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      certName,
+					Namespace: "some-namespace",
+				},
+				Spec: cmapi.CertificateSpec{
+					Usages:     []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
+					Duration:   &metav1.Duration{Duration: DefaultCertificateDuration},
+					IsCA:       false,
+					DNSNames:   domainSlice,
+					SecretName: secretName,
+
+					PrivateKey: &cmapi.CertificatePrivateKey{
+						Encoding: cmapi.PKCS1,
+					},
+				},
+			},
+			wantErr: nil,
+		},
 		{
 			name: "With subject annotations",
 			route: &routev1.Route{
