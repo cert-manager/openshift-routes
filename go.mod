@@ -7,7 +7,7 @@ go 1.25.0
 // comment to it as to when it can be removed
 
 require (
-	github.com/cert-manager/cert-manager v1.19.2
+	github.com/cert-manager/cert-manager v1.19.3
 	github.com/go-logr/logr v1.4.3
 	github.com/openshift/api v0.0.0-20251205114208-5eb46a7b4ce8
 	github.com/openshift/client-go v0.0.0-20251205093018-96a6cbc1420c
