@@ -108,6 +108,7 @@ metadata:
     cert-manager.io/uri-sans: "spiffe://trustdomain/workload" # Optional, no default
     cert-manager.io/private-key-algorithm: "ECDSA" # Optional, defaults to RSA
     cert-manager.io/private-key-size: "384" # Optional, defaults to 265 for ECDSA and 2048 for RSA
+    cert-manager.io/private-key-encoding: "PKCS8" # Optional, defaults to PKCS1
     cert-manager.io/email-sans: "me@example.com,you@example.com" # Optional, no default
     cert-manager.io/subject-organizations: "company" # Optional, no default
     cert-manager.io/subject-organizationalunits: "company division" # Optional, no default
