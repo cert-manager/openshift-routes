@@ -15,8 +15,14 @@
         "image": {
           "$ref": "#/$defs/helm-values.image"
         },
+        "imageNamespace": {
+          "$ref": "#/$defs/helm-values.imageNamespace"
+        },
         "imagePullSecrets": {
           "$ref": "#/$defs/helm-values.imagePullSecrets"
+        },
+        "imageRegistry": {
+          "$ref": "#/$defs/helm-values.imageRegistry"
         },
         "logLevel": {
           "$ref": "#/$defs/helm-values.logLevel"
@@ -81,6 +87,9 @@
         "digest": {
           "$ref": "#/$defs/helm-values.image.digest"
         },
+        "name": {
+          "$ref": "#/$defs/helm-values.image.name"
+        },
         "pullPolicy": {
           "$ref": "#/$defs/helm-values.image.pullPolicy"
         },
@@ -100,22 +109,32 @@
       "description": "Target image digest. Override any tag, if set.\nFor example:\ndigest: sha256:0e072dddd1f7f8fc8909a2ca6f65e76c5f0d2fcfb8be47935ae3457e8bbceb20",
       "type": "string"
     },
+    "helm-values.image.name": {
+      "default": "cert-manager-openshift-routes",
+      "description": "The image name for openshift-routes.\nThis is used (together with `imageRegistry` and `imageNamespace`) to construct the full image reference.",
+      "type": "string"
+    },
     "helm-values.image.pullPolicy": {
       "default": "IfNotPresent",
       "description": "Kubernetes imagePullPolicy on Deployment.",
       "type": "string"
     },
     "helm-values.image.registry": {
-      "description": "Target image registry. This value is prepended to the target image repository, if set.\nFor example:\nregistry: quay.io\nrepository: jetstack/cert-manager-openshift-routes",
+      "description": "Deprecated: per-component registry prefix.\n\nIf set, this value is *prepended* to the image repository that the chart would otherwise render. This applies both when `image.repository` is set and when the repository is computed from\n`imageRegistry` + `imageNamespace` + `image.name`.\n\nThis can produce \"double registry\" style references such as\n`legacy.example.io/ghcr.io/cert-manager/...`. Prefer using the global\n`imageRegistry`/`imageNamespace` values.",
       "type": "string"
     },
     "helm-values.image.repository": {
-      "default": "ghcr.io/cert-manager/cert-manager-openshift-routes",
-      "description": "Target image repository.",
+      "default": "",
+      "description": "Full repository override (takes precedence over `imageRegistry`, `imageNamespace`, and `image.name`). Example: ghcr.io/cert-manager/cert-manager-openshift-routes",
       "type": "string"
     },
     "helm-values.image.tag": {
       "description": "Override the image tag to deploy by setting this variable. If no value is set, the chart's appVersion is used.",
+      "type": "string"
+    },
+    "helm-values.imageNamespace": {
+      "default": "cert-manager",
+      "description": "The repository namespace used for openshift-routes images by default.\nExamples:\n- cert-manager\n- jetstack",
       "type": "string"
     },
     "helm-values.imagePullSecrets": {
@@ -123,6 +142,11 @@
       "description": "Optional secrets used for pulling the openshift-routes container image.",
       "items": {},
       "type": "array"
+    },
+    "helm-values.imageRegistry": {
+      "default": "ghcr.io",
+      "description": "The container registry used for openshift-routes images by default. This can include path prefixes (e.g. \"artifactory.example.com/docker\").",
+      "type": "string"
     },
     "helm-values.logLevel": {
       "default": 5,
