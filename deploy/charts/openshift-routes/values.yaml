@@ -21,16 +21,42 @@ namespace: ""
 # +docs:property
 # nameOverride: "my-cert-manager"
 
+# The container registry used for openshift-routes images by default.
+# This can include path prefixes (e.g. "artifactory.example.com/docker").
+# +docs:property
+imageRegistry: ghcr.io
+
+# The repository namespace used for openshift-routes images by default.
+# Examples:
+# - cert-manager
+# - jetstack
+# +docs:property
+imageNamespace: cert-manager
+
 image:
-  # Target image registry. This value is prepended to the target image repository, if set.
-  # For example:
-  #   registry: quay.io
-  #   repository: jetstack/cert-manager-openshift-routes
+  # Deprecated: per-component registry prefix.
+  #
+  # If set, this value is *prepended* to the image repository that the chart would otherwise render.
+  # This applies both when `image.repository` is set and when the repository is computed from
+  # `imageRegistry` + `imageNamespace` + `image.name`.
+  #
+  # This can produce "double registry" style references such as
+  # `legacy.example.io/ghcr.io/cert-manager/...`. Prefer using the global
+  # `imageRegistry`/`imageNamespace` values.
   # +docs:property
   # registry: quay.io
 
-  # Target image repository.
-  repository: ghcr.io/cert-manager/cert-manager-openshift-routes
+  # Full repository override (takes precedence over `imageRegistry`, `imageNamespace`,
+  # and `image.name`).
+  # Example: ghcr.io/cert-manager/cert-manager-openshift-routes
+  # +docs:property
+  repository: ""
+
+  # The image name for openshift-routes.
+  # This is used (together with `imageRegistry` and `imageNamespace`) to construct the full
+  # image reference.
+  # +docs:property
+  name: cert-manager-openshift-routes
 
   # Override the image tag to deploy by setting this variable.
   # If no value is set, the chart's appVersion is used.

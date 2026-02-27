@@ -31,23 +31,53 @@ Override the "cert-manager.fullname" value. This value is used as part of most o
 
 Override the "cert-manager.name" value, which is used to annotate some of the resources that are created by this Chart (using "app.kubernetes.io/name"). NOTE: There are some inconsitencies in the Helm chart when it comes to these annotations (some resources use eg. "cainjector.name" which resolves to the value "cainjector").
 
+#### **imageRegistry** ~ `string`
+> Default value:
+> ```yaml
+> ghcr.io
+> ```
+
+The container registry used for openshift-routes images by default. This can include path prefixes (e.g. "artifactory.example.com/docker").
+
+#### **imageNamespace** ~ `string`
+> Default value:
+> ```yaml
+> cert-manager
+> ```
+
+The repository namespace used for openshift-routes images by default.  
+Examples:  
+- cert-manager  
+- jetstack
+
 #### **image.registry** ~ `string`
 
-Target image registry. This value is prepended to the target image repository, if set.  
-For example:
-
-```yaml
-registry: quay.io
-repository: jetstack/cert-manager-openshift-routes
-```
+Deprecated: per-component registry prefix.  
+  
+If set, this value is *prepended* to the image repository that the chart would otherwise render. This applies both when `image.repository` is set and when the repository is computed from  
+`imageRegistry` + `imageNamespace` + `image.name`.  
+  
+This can produce "double registry" style references such as  
+`legacy.example.io/ghcr.io/cert-manager/...`. Prefer using the global  
+`imageRegistry`/`imageNamespace` values.
 
 #### **image.repository** ~ `string`
 > Default value:
 > ```yaml
-> ghcr.io/cert-manager/cert-manager-openshift-routes
+> ""
 > ```
 
-Target image repository.
+Full repository override (takes precedence over `imageRegistry`, `imageNamespace`, and `image.name`). Example: ghcr.io/cert-manager/cert-manager-openshift-routes
+
+#### **image.name** ~ `string`
+> Default value:
+> ```yaml
+> cert-manager-openshift-routes
+> ```
+
+The image name for openshift-routes.  
+This is used (together with `imageRegistry` and `imageNamespace`) to construct the full image reference.
+
 #### **image.tag** ~ `string`
 
 Override the image tag to deploy by setting this variable. If no value is set, the chart's appVersion is used.
