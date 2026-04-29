@@ -291,6 +291,20 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 		privateKeyAlgorithm = cmapi.RSAKeyAlgorithm
 	}
 
+	var privateKeyEncoding cmapi.PrivateKeyEncoding
+	privateKeyEncodingStr, found := route.Annotations[cmapi.PrivateKeyEncodingAnnotationKey]
+	if found {
+		switch strings.ToLower(privateKeyEncodingStr) {
+		case "pkcs8":
+			privateKeyEncoding = cmapi.PKCS8
+		case "pkcs1":
+			privateKeyEncoding = cmapi.PKCS1
+		default:
+			r.log.V(1).Info("unknown private key encoding, defaulting to PKCS1", "encoding", privateKeyEncodingStr)
+			privateKeyEncoding = cmapi.PKCS1
+		}
+	}
+
 	var privateKeySize int
 	privateKeySizeStr, found := route.Annotations[cmapi.PrivateKeySizeAnnotationKey]
 	if found {
@@ -513,6 +527,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 				Algorithm:      privateKeyAlgorithm,
 				Size:           privateKeySize,
 				RotationPolicy: privateKeyRotationPolicy,
+				Encoding:       privateKeyEncoding,
 			},
 			EmailAddresses: emailAddresses,
 			DNSNames:       dnsNames,
