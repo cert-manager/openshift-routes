@@ -61,6 +61,7 @@ linters:
     - nilerr
     - nilnil
     - noctx
+    - nolintlint
     - nosprintfhostport
     - predeclared
     - promlinter
