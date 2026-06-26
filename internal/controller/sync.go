@@ -221,13 +221,26 @@ func (r *RouteController) getCertificateForRoute(ctx context.Context, route *rou
 		// You must copy here to avoid a race condition where the CR contents changes underneath you!
 		certCandidate := cert.DeepCopy()
 		for _, owner := range certCandidate.OwnerReferences {
-			if owner.UID == route.UID {
+			if owner.UID == route.UID &&
+				owner.Controller != nil && *owner.Controller &&
+				owner.Kind == "Route" &&
+				owner.APIVersion == routev1.GroupVersion.String() {
 				candidates = append(candidates, certCandidate)
+				break
 			}
 		}
 	}
 
 	if len(candidates) == 1 {
+		expectedSecretName := safeKubernetesNameAppend(route.Name, "tls")
+		if candidates[0].Spec.SecretName != expectedSecretName {
+			r.log.V(1).Info("ignoring Certificate with unexpected secretName",
+				"certificate", candidates[0].Name,
+				"secretName", candidates[0].Spec.SecretName,
+				"expectedSecretName", expectedSecretName,
+			)
+			return nil, nil
+		}
 		return candidates[0], nil
 	}
 

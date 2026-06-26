@@ -32,12 +32,15 @@ import (
 
 	cmapi "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	cmfake "github.com/cert-manager/cert-manager/pkg/client/clientset/versioned/fake"
 	utilpki "github.com/cert-manager/cert-manager/pkg/util/pki"
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 )
 
@@ -1687,6 +1690,210 @@ func TestRoute_buildNextCertificate(t *testing.T) {
 			}
 
 			close(recorder.Events)
+		})
+	}
+}
+
+// TestGetCertificateForRoute verifies that getCertificateForRoute only adopts
+// a Certificate when its ownerReference fully matches the controller-set fields
+// (UID, Controller=true, Kind, APIVersion) and its spec.secretName equals the
+// deterministic value the controller would set. Forged or tampered Certificates
+// must be rejected to prevent same-namespace Secret exfiltration (CWE-639).
+func TestGetCertificateForRoute(t *testing.T) {
+	trueVal := true
+	falseVal := false
+
+	routeUID := types.UID("route-uid-abc")
+	routeName := "my-route"
+	routeNamespace := "my-namespace"
+	expectedSecretName := safeKubernetesNameAppend(routeName, "tls")
+
+	route := &routev1.Route{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      routeName,
+			Namespace: routeNamespace,
+			UID:       routeUID,
+		},
+	}
+
+	// validOwnerRef is what buildNextCert writes via metav1.NewControllerRef.
+	validOwnerRef := metav1.OwnerReference{
+		APIVersion: routev1.GroupVersion.String(),
+		Kind:       "Route",
+		Name:       routeName,
+		UID:        routeUID,
+		Controller: &trueVal,
+	}
+
+	tests := []struct {
+		name       string
+		certs      []runtime.Object
+		wantName   string // non-empty ⇒ expect this cert to be returned
+		wantNil    bool   // expect (nil, nil)
+		wantErrStr string // non-empty ⇒ expect error containing this substring
+	}{
+		{
+			name: "controller-created certificate is adopted",
+			certs: []runtime.Object{&cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            safeKubernetesNameAppend(routeName, "cert"),
+					Namespace:       routeNamespace,
+					OwnerReferences: []metav1.OwnerReference{validOwnerRef},
+				},
+				Spec: cmapi.CertificateSpec{SecretName: expectedSecretName},
+			}},
+			wantName: safeKubernetesNameAppend(routeName, "cert"),
+		},
+		{
+			name:    "no certificates returns nil",
+			certs:   nil,
+			wantNil: true,
+		},
+		{
+			name: "forged ownerRef with Controller=nil is rejected",
+			certs: []runtime.Object{&cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "forged",
+					Namespace: routeNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: routev1.GroupVersion.String(),
+						Kind:       "Route",
+						Name:       routeName,
+						UID:        routeUID,
+						// Controller deliberately omitted (nil)
+					}},
+				},
+				Spec: cmapi.CertificateSpec{SecretName: "victim-tls"},
+			}},
+			wantNil: true,
+		},
+		{
+			name: "forged ownerRef with Controller=false is rejected",
+			certs: []runtime.Object{&cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "forged",
+					Namespace: routeNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: routev1.GroupVersion.String(),
+						Kind:       "Route",
+						Name:       routeName,
+						UID:        routeUID,
+						Controller: &falseVal,
+					}},
+				},
+				Spec: cmapi.CertificateSpec{SecretName: "victim-tls"},
+			}},
+			wantNil: true,
+		},
+		{
+			name: "forged ownerRef with wrong Kind is rejected",
+			certs: []runtime.Object{&cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "forged",
+					Namespace: routeNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: routev1.GroupVersion.String(),
+						Kind:       "Pod",
+						Name:       routeName,
+						UID:        routeUID,
+						Controller: &trueVal,
+					}},
+				},
+				Spec: cmapi.CertificateSpec{SecretName: "victim-tls"},
+			}},
+			wantNil: true,
+		},
+		{
+			name: "forged ownerRef with wrong APIVersion is rejected",
+			certs: []runtime.Object{&cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "forged",
+					Namespace: routeNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "v1",
+						Kind:       "Route",
+						Name:       routeName,
+						UID:        routeUID,
+						Controller: &trueVal,
+					}},
+				},
+				Spec: cmapi.CertificateSpec{SecretName: "victim-tls"},
+			}},
+			wantNil: true,
+		},
+		{
+			name: "forged ownerRef with wrong UID is rejected",
+			certs: []runtime.Object{&cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "forged",
+					Namespace: routeNamespace,
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: routev1.GroupVersion.String(),
+						Kind:       "Route",
+						Name:       routeName,
+						UID:        "wrong-uid",
+						Controller: &trueVal,
+					}},
+				},
+				Spec: cmapi.CertificateSpec{SecretName: "victim-tls"},
+			}},
+			wantNil: true,
+		},
+		{
+			name: "certificate with unexpected secretName is ignored (not adopted)",
+			certs: []runtime.Object{&cmapi.Certificate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            safeKubernetesNameAppend(routeName, "cert"),
+					Namespace:       routeNamespace,
+					OwnerReferences: []metav1.OwnerReference{validOwnerRef},
+				},
+				Spec: cmapi.CertificateSpec{SecretName: "victim-tls"},
+			}},
+			wantNil: true,
+		},
+		{
+			name: "multiple matching certificates returns error",
+			certs: []runtime.Object{
+				&cmapi.Certificate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            safeKubernetesNameAppend(routeName, "cert"),
+						Namespace:       routeNamespace,
+						OwnerReferences: []metav1.OwnerReference{validOwnerRef},
+					},
+					Spec: cmapi.CertificateSpec{SecretName: expectedSecretName},
+				},
+				&cmapi.Certificate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:            safeKubernetesNameAppend(routeName, "cert2"),
+						Namespace:       routeNamespace,
+						OwnerReferences: []metav1.OwnerReference{validOwnerRef},
+					},
+					Spec: cmapi.CertificateSpec{SecretName: expectedSecretName},
+				},
+			},
+			wantErrStr: "multiple matching Certificates",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &RouteController{
+				certClient: cmfake.NewSimpleClientset(tt.certs...),
+			}
+
+			got, err := r.getCertificateForRoute(t.Context(), route)
+
+			if tt.wantErrStr != "" {
+				require.ErrorContains(t, err, tt.wantErrStr)
+				return
+			}
+			require.NoError(t, err)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantName, got.Name)
 		})
 	}
 }
