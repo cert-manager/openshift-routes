@@ -76,6 +76,20 @@ Please review the [values.yaml](./deploy/chart/values.yaml) file for all configu
 
 ## Usage
 
+> [!WARNING]
+> **openshift-routes is not designed for multi-tenanted clusters.**
+>
+> Certificate requests are shaped from Route annotations (`cert-manager.io/alt-names`,
+> `ip-sans`, `uri-sans`, `common-name`, `issuer-*`) that are not restricted to the
+> router-admitted hostnames, and are submitted under the controller's own cluster-wide
+> ServiceAccount. Any user who can edit a Route can therefore request a certificate for
+> arbitrary hostnames from any reachable Issuer, unattributable to that user. This
+> matches upstream cert-manager's ingress-shim; editing Routes is treated as a
+> privileged operation. On shared clusters, don't rely on openshift-routes as a
+> security boundary — restrict Route RBAC, prefer domain-validating (ACME) Issuers, or
+> gate issuance with [approver-policy](https://cert-manager.io/docs/policy/approval/approver-policy/)
+> on `spec.dnsNames`/`spec.issuerRef`.
+
 If you follow the above prerequisites, use this annotations below
 
 ```yaml
