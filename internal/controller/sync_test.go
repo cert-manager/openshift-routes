@@ -552,7 +552,7 @@ func TestRoute_buildNextCertificate(t *testing.T) {
 					Usages:     []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
 					SecretName: secretName,
 
-					IssuerRef: cmmeta.ObjectReference{
+					IssuerRef: cmmeta.IssuerReference{
 						Name: "self-signed-issuer",
 						Kind: "SomeIssuer",
 					},
@@ -603,7 +603,7 @@ func TestRoute_buildNextCertificate(t *testing.T) {
 					Usages:     []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
 					SecretName: secretName,
 
-					IssuerRef: cmmeta.ObjectReference{
+					IssuerRef: cmmeta.IssuerReference{
 						Name:  "self-signed-issuer",
 						Kind:  "SomeIssuer",
 						Group: "group.example.com",
@@ -655,7 +655,7 @@ func TestRoute_buildNextCertificate(t *testing.T) {
 					Usages:     []cmapi.KeyUsage{cmapi.UsageServerAuth, cmapi.UsageDigitalSignature, cmapi.UsageKeyEncipherment},
 					SecretName: secretName,
 
-					IssuerRef: cmmeta.ObjectReference{
+					IssuerRef: cmmeta.IssuerReference{
 						Name:  "self-signed-issuer",
 						Kind:  "Issuer",
 						Group: "external-issuer.io",

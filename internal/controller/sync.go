@@ -531,7 +531,7 @@ func (r *RouteController) buildNextCert(ctx context.Context, route *routev1.Rout
 			DNSNames:       dnsNames,
 			URIs:           uriSANs,
 			IPAddresses:    ipSANs,
-			IssuerRef: cmmeta.ObjectReference{
+			IssuerRef: cmmeta.IssuerReference{
 				Name:  issuerName,
 				Kind:  route.Annotations[cmapi.IssuerKindAnnotationKey],
 				Group: route.Annotations[cmapi.IssuerGroupAnnotationKey],
