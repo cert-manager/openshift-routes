@@ -9,8 +9,8 @@ go 1.26.0
 require (
 	github.com/cert-manager/cert-manager v1.21.1
 	github.com/go-logr/logr v1.4.4
-	github.com/openshift/api v0.0.0-20251205114208-5eb46a7b4ce8
-	github.com/openshift/client-go v0.0.0-20251205093018-96a6cbc1420c
+	github.com/openshift/api v0.0.0-20260805160557-b61243060d5f
+	github.com/openshift/client-go v0.0.0-20260806041845-b74fb348f1e7
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
@@ -52,7 +52,6 @@ require (
 	github.com/go-openapi/swag/stringutils v0.26.0 // indirect
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -92,7 +91,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.36.2 // indirect
-	k8s.io/kube-openapi v0.0.0-20260501160325-927ab1f70cd6 // indirect
+	k8s.io/kube-openapi v0.0.0-20260519202549-bbf5c5577288 // indirect
 	k8s.io/utils v0.0.0-20260626114624-be93311217bd // indirect
 	sigs.k8s.io/gateway-api v1.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
