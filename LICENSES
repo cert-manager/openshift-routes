@@ -68,7 +68,6 @@ github.com/go-openapi/swag/netutils,Apache-2.0
 github.com/go-openapi/swag/stringutils,Apache-2.0
 github.com/go-openapi/swag/typeutils,Apache-2.0
 github.com/go-openapi/swag/yamlutils,Apache-2.0
-github.com/gogo/protobuf/proto,BSD-3-Clause
 github.com/google/btree,Apache-2.0
 github.com/google/gnostic-models,Apache-2.0
 github.com/google/uuid,BSD-3-Clause
