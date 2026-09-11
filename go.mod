@@ -7,7 +7,7 @@ go 1.26.0
 // comment to it as to when it can be removed
 
 require (
-	github.com/cert-manager/cert-manager v1.21.1
+	github.com/cert-manager/cert-manager v1.21.2
 	github.com/go-logr/logr v1.4.4
 	github.com/openshift/api v0.0.0-20260807110950-72ae4424ef35
 	github.com/openshift/client-go v0.0.0-20260806041845-b74fb348f1e7
@@ -78,7 +78,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.56.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
