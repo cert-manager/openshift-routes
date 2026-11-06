@@ -26,11 +26,14 @@ import (
 	routescheme "github.com/openshift/client-go/route/clientset/versioned/scheme"
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/fields"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/cert-manager/openshift-routes/internal/cmd/app/options"
@@ -87,6 +90,17 @@ func Command() *cobra.Command {
 				return fmt.Errorf("connected to the Kubernetes API, but the cert-manager v1 CRDs do not appear to be installed")
 			}
 
+			// Load in Cache Configs for limited namespaces
+			cacheConfig := map[string]cache.Config{}
+			if len(opts.LimitNamespaces) > 0 {
+				for _, ns := range opts.LimitNamespaces {
+					cacheConfig[ns] = cache.Config{
+						LabelSelector: labels.Everything(),
+						FieldSelector: fields.Everything(),
+					}
+				}
+			}
+
 			logger := opts.Logr.WithName("controller-manager")
 			eventBroadcaster := record.NewBroadcaster()
 			eventBroadcaster.StartLogging(func(format string, args ...any) {
@@ -106,6 +120,7 @@ func Command() *cobra.Command {
 
 			mgr, err := ctrl.NewManager(opts.RestConfig, ctrl.Options{
 				Scheme:                        combinedScheme,
+				Cache:                         cache.Options{DefaultNamespaces: cacheConfig},
 				Logger:                        logger,
 				LeaderElection:                opts.EnableLeaderElection,
 				LeaderElectionID:              "cert-manager-openshift-routes",

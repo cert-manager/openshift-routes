@@ -57,6 +57,9 @@ type Options struct {
 
 	logLevel        string
 	kubeConfigFlags *genericclioptions.ConfigFlags
+
+	// LimitNamespaces is the list of namespaces to which cert-manager-openshift will limit itself for reconciliation
+	LimitNamespaces []string
 }
 
 func New() *Options {
@@ -134,4 +137,8 @@ func (o *Options) addAppFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.LeaderElectionNamespace,
 		"leader-election-namespace", "cert-manager",
 		"Namespace to create leader election resources in.")
+
+	fs.StringSliceVar(&o.LimitNamespaces,
+		"limit-namespaces", []string{""},
+		"List of comma ',' delimited namespaces within which openshift-routes will operator on resources")
 }
